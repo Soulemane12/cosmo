@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ServiceRequest, 
   getServiceById, 
   getUserById, 
-  getProviderById 
+  getProviderById,
+  Service,
+  Provider,
+  User
 } from '@/data/store';
 
 interface RequestCardProps {
@@ -21,9 +24,45 @@ export default function RequestCard({
   onDecline,
   showPendingProvider = false
 }: RequestCardProps) {
-  const service = getServiceById(request.serviceId);
-  const provider = getProviderById(request.providerId);
-  const user = getUserById(request.userId);
+  const [service, setService] = useState<Service | null>(null);
+  const [provider, setProvider] = useState<Provider | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const [serviceData, providerData, userData] = await Promise.all([
+          getServiceById(request.serviceId),
+          getProviderById(request.providerId),
+          getUserById(request.userId)
+        ]);
+
+        setService(serviceData);
+        setProvider(providerData);
+        setUser(userData);
+      } catch (error) {
+        console.error('Error loading request data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [request.serviceId, request.providerId, request.userId]);
+
+  if (isLoading) {
+    return (
+      <div className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
+          <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
+          <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   if (!service || (!isProvider && !provider && !showPendingProvider) || (isProvider && !user)) {
     return null;

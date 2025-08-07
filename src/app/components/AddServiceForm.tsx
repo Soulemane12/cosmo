@@ -47,7 +47,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
         name,
         description,
         price: priceValue,
-        category
+        category,
+        provider_id: providerId
       }, providerId);
       
       if (newService) {

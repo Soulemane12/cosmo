@@ -1,12 +1,14 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CartItem, 
   getServiceById, 
   getProviderById, 
   removeFromCart,
-  updateCartItemQuantity 
+  updateCartItemQuantity,
+  Service,
+  Provider
 } from '@/data/store';
 
 interface CartDisplayProps {
@@ -17,22 +19,67 @@ interface CartDisplayProps {
 }
 
 export default function CartDisplay({ items, userId, onUpdateCart, onCheckout }: CartDisplayProps) {
+  const [services, setServices] = useState<{[key: string]: Service}>({});
+  const [providers, setProviders] = useState<{[key: string]: Provider}>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      const servicesData: {[key: string]: Service} = {};
+      const providersData: {[key: string]: Provider} = {};
+
+      // Load services and providers for all cart items
+      for (const item of items) {
+        const [service, provider] = await Promise.all([
+          getServiceById(item.serviceId),
+          getProviderById(item.providerId)
+        ]);
+        
+        if (service) servicesData[item.serviceId] = service;
+        if (provider) providersData[item.providerId] = provider;
+      }
+
+      setServices(servicesData);
+      setProviders(providersData);
+      setIsLoading(false);
+    };
+
+    if (items.length > 0) {
+      loadData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [items]);
+
   const calculateTotal = (): number => {
     return items.reduce((total, item) => {
-      const service = getServiceById(item.serviceId);
+      const service = services[item.serviceId];
       return total + (service ? service.price * item.quantity : 0);
     }, 0);
   };
 
-  const handleRemoveItem = (itemId: string) => {
-    removeFromCart(userId, itemId);
+  const handleRemoveItem = async (itemId: string) => {
+    await removeFromCart(userId, itemId);
     onUpdateCart();
   };
 
-  const handleQuantityChange = (itemId: string, quantity: number) => {
-    updateCartItemQuantity(userId, itemId, quantity);
+  const handleQuantityChange = async (itemId: string, quantity: number) => {
+    await updateCartItemQuantity(userId, itemId, quantity);
     onUpdateCart();
   };
+
+  if (isLoading) {
+    return (
+      <div className="bg-gray-800 shadow rounded-lg p-6 text-center">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-700 rounded mb-2"></div>
+          <div className="h-4 bg-gray-700 rounded mb-2"></div>
+          <div className="h-4 bg-gray-700 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -54,8 +101,8 @@ export default function CartDisplay({ items, userId, onUpdateCart, onCheckout }:
         <h3 className="text-lg font-medium text-white mb-4">Your Cart</h3>
         <div className="divide-y divide-gray-700">
           {items.map((item) => {
-            const service = getServiceById(item.serviceId);
-            const provider = getProviderById(item.providerId);
+            const service = services[item.serviceId];
+            const provider = providers[item.providerId];
             
             if (!service || !provider) return null;
             

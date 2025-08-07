@@ -17,7 +17,7 @@ import RequestCard from '../components/RequestCard';
 import ServiceCard from '../components/ServiceCard';
 import Modal from '../components/Modal';
 import AddServiceForm from '../components/AddServiceForm';
-import { Provider, User } from '@/types';
+import { Provider, User } from '@/data/store';
 
 export default function ServiceProviderDashboard() {
   const { currentUser, isLoading } = useAuth();
@@ -26,7 +26,12 @@ export default function ServiceProviderDashboard() {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [providerDetails, setProviderDetails] = useState<Provider | null>(null);
   const [isAddServiceModalOpen, setIsAddServiceModalOpen] = useState(false);
-  const [clients, setClients] = useState<{[key: string]: User}>({});
+  interface ClientData extends User {
+    requestCount: number;
+    pendingCount: number;
+  }
+  
+  const [clients, setClients] = useState<{[key: string]: ClientData}>({});
   const [marketplaceRequests, setMarketplaceRequests] = useState<ServiceRequest[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -103,7 +108,7 @@ export default function ServiceProviderDashboard() {
 
   // Refresh clients map based on updated requests
   const refreshClientsMap = async (updatedRequests: ServiceRequest[]) => {
-    const clients: {[key: string]: User} = {};
+    const clients: {[key: string]: ClientData} = {};
     
     for (const request of updatedRequests) {
       if (!clients[request.userId]) {
