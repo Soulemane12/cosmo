@@ -1,0 +1,604 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { 
+  Service, 
+  Provider, 
+  createServiceRequest, 
+  getServiceRequestsByUserId,
+  getUserById,
+  getCartByUserId,
+  addToCart,
+  clearCart,
+  getAllServices,
+  getAllProviders
+} from '@/data/store';
+import { useAuth } from '@/data/AuthContext';
+import { useRouter } from 'next/navigation';
+import AppHeader from '../components/AppHeader';
+import ProviderCard from '../components/ProviderCard';
+import ServiceCard from '../components/ServiceCard';
+import Modal from '../components/Modal';
+import RequestForm from '../components/RequestForm';
+import RequestCard from '../components/RequestCard';
+import CartDisplay from '../components/CartDisplay';
+
+export default function UserDashboard() {
+  const { currentUser, isLoading } = useAuth();
+  const router = useRouter();
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'providers' | 'services' | 'requests' | 'cart' | 'marketplace'>('providers');
+  const [requests, setRequests] = useState<Array<any>>([]);
+  const [userDetails, setUserDetails] = useState<any>(null);
+  const [cart, setCart] = useState<any>({ items: [] });
+  const [allServices, setAllServices] = useState<Service[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [isGenericRequestModalOpen, setIsGenericRequestModalOpen] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  useEffect(() => {
+    // Check if user is authenticated and is a client
+    if (!isLoading && (!currentUser || currentUser.type !== 'user')) {
+      router.push('/login');
+      return;
+    }
+
+    if (currentUser) {
+      const loadData = async () => {
+        setIsLoadingData(true);
+        try {
+          // Load all data in parallel
+          const [userRequests, userDetailsData, userCart, servicesData, providersData] = await Promise.all([
+            getServiceRequestsByUserId(currentUser.id),
+            getUserById(currentUser.id),
+            getCartByUserId(currentUser.id),
+            getAllServices(),
+            getAllProviders()
+          ]);
+
+          setRequests(userRequests);
+          setUserDetails(userDetailsData);
+          setCart(userCart || { items: [] });
+          setAllServices(servicesData);
+          setProviders(providersData);
+        } catch (error) {
+          console.error('Error loading data:', error);
+        } finally {
+          setIsLoadingData(false);
+        }
+      };
+
+      loadData();
+    }
+  }, [currentUser, isLoading, router]);
+
+  // Handle requesting a service
+  const handleRequestService = async (data: {
+    providerId: string;
+    serviceId: string;
+    userId: string;
+    notes: string;
+    scheduledDate: string;
+  }) => {
+    if (!currentUser) return;
+
+    try {
+      await createServiceRequest({
+        ...data,
+        status: 'pending',
+        requestDate: new Date().toISOString().split('T')[0],
+      });
+      
+      // Update local requests state
+      const updatedRequests = await getServiceRequestsByUserId(currentUser.id);
+      setRequests(updatedRequests);
+      
+      // Close modal
+      setIsModalOpen(false);
+      setSelectedService(null);
+      setSelectedProvider(null);
+    } catch (error) {
+      console.error('Error creating service request:', error);
+      alert('Failed to create service request. Please try again.');
+    }
+  };
+
+  // Handle viewing provider services
+  const handleViewProviderServices = (provider: Provider) => {
+    setSelectedProvider(provider);
+    setActiveTab('services');
+  };
+
+  // Handle selecting a service to request
+  const handleSelectService = (service: Service) => {
+    setSelectedService(service);
+    setIsModalOpen(true);
+  };
+
+  // Handle adding a service to cart
+  const handleAddToCart = async (service: Service, provider: Provider) => {
+    if (!currentUser) return;
+    
+    try {
+      await addToCart(currentUser.id, service.id, provider.id);
+      const updatedCart = await getCartByUserId(currentUser.id);
+      setCart(updatedCart || { items: [] });
+      
+      // Show confirmation
+      alert(`${service.name} added to cart!`);
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      alert('Failed to add item to cart. Please try again.');
+    }
+  };
+
+  // Handle cart checkout
+  const handleCheckout = () => {
+    if (!currentUser || cart.items.length === 0) return;
+    
+    setIsCheckoutModalOpen(true);
+  };
+
+  // Handle completing checkout
+  const handleCompleteCheckout = async () => {
+    if (!currentUser) return;
+    
+    try {
+      // Convert cart items to service requests
+      for (const item of cart.items) {
+        await createServiceRequest({
+          providerId: item.providerId,
+          serviceId: item.serviceId,
+          userId: currentUser.id,
+          notes: "Ordered through cart checkout",
+          requestDate: new Date().toISOString().split('T')[0],
+          status: 'pending'
+        });
+      }
+      
+      // Clear the cart
+      await clearCart(currentUser.id);
+      const updatedCart = await getCartByUserId(currentUser.id);
+      setCart(updatedCart || { items: [] });
+      
+      // Update requests
+      const updatedRequests = await getServiceRequestsByUserId(currentUser.id);
+      setRequests(updatedRequests);
+      
+      // Close modal and show confirmation
+      setIsCheckoutModalOpen(false);
+      alert('Thank you for your order! You can track your requests in the "My Requests" tab.');
+      setActiveTab('requests');
+    } catch (error) {
+      console.error('Error completing checkout:', error);
+      alert('Failed to complete checkout. Please try again.');
+    }
+  };
+
+  // Handle refreshing cart
+  const handleRefreshCart = async () => {
+    if (!currentUser) return;
+    try {
+      const updatedCart = await getCartByUserId(currentUser.id);
+      setCart(updatedCart || { items: [] });
+    } catch (error) {
+      console.error('Error refreshing cart:', error);
+    }
+  };
+
+  // Handle requesting a service without specifying a provider
+  const handleGenericServiceRequest = (service: Service) => {
+    setSelectedService(service);
+    setIsGenericRequestModalOpen(true);
+  };
+  
+  // Submit a generic service request (to be matched with providers later)
+  const submitGenericRequest = async (data: {
+    serviceId: string;
+    userId: string;
+    notes: string;
+    scheduledDate: string;
+  }) => {
+    if (!currentUser) return;
+    
+    try {
+      // Create a service request without a specific provider
+      await createServiceRequest({
+        ...data,
+        providerId: 'pending', // Special value indicating no specific provider yet
+        status: 'pending',
+        requestDate: new Date().toISOString().split('T')[0],
+      });
+      
+      // Update local requests state
+      const updatedRequests = await getServiceRequestsByUserId(currentUser.id);
+      setRequests(updatedRequests);
+      
+      // Close modal and show confirmation
+      setIsGenericRequestModalOpen(false);
+      setSelectedService(null);
+      alert('Your service request has been submitted! Providers will be able to view and accept your request.');
+    } catch (error) {
+      console.error('Error submitting generic request:', error);
+      alert('Failed to submit request. Please try again.');
+    }
+  };
+
+  if (isLoading || !currentUser || !userDetails || isLoadingData) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <AppHeader currentPath="/user" />
+        <div className="max-w-7xl mx-auto py-12 px-4 text-center">
+          <div className="animate-pulse h-8 w-48 bg-gray-300 dark:bg-gray-700 rounded mx-auto mb-4"></div>
+          <div className="animate-pulse h-4 w-64 bg-gray-200 dark:bg-gray-800 rounded mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <AppHeader currentPath="/user" />
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <div className="mb-6">
+            <div className="flex flex-wrap items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Welcome, {userDetails.name}
+                </h1>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Find and book cosmetic services
+                </p>
+              </div>
+              
+              {cart.items.length > 0 && (
+                <button
+                  onClick={() => setActiveTab('cart')}
+                  className="flex items-center mt-2 sm:mt-0 bg-indigo-100 dark:bg-indigo-900 hover:bg-indigo-200 dark:hover:bg-indigo-800 px-4 py-2 rounded-lg transition"
+                >
+                  <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <span className="ml-2 text-indigo-800 dark:text-indigo-200 font-medium">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in cart</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+            <nav className="flex flex-wrap -mb-px">
+              <button
+                onClick={() => setActiveTab('providers')}
+                className={`py-4 px-6 text-sm font-medium ${
+                  activeTab === 'providers'
+                    ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                Providers
+              </button>
+              <button
+                onClick={() => setActiveTab('marketplace')}
+                className={`py-4 px-6 text-sm font-medium ${
+                  activeTab === 'marketplace'
+                    ? 'border-b-2 border-purple-500 text-purple-600 dark:text-purple-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                Service Marketplace
+              </button>
+              {selectedProvider && (
+                <button
+                  onClick={() => setActiveTab('services')}
+                  className={`py-4 px-6 text-sm font-medium ${
+                    activeTab === 'services'
+                      ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  Services
+                </button>
+              )}
+              <button
+                onClick={() => setActiveTab('requests')}
+                className={`py-4 px-6 text-sm font-medium ${
+                  activeTab === 'requests'
+                    ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                My Requests
+              </button>
+              <button
+                onClick={() => setActiveTab('cart')}
+                className={`py-4 px-6 text-sm font-medium ${
+                  activeTab === 'cart'
+                    ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                Shopping Cart
+                {cart.items.length > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-indigo-600 rounded-full">
+                    {cart.items.length}
+                  </span>
+                )}
+              </button>
+            </nav>
+          </div>
+
+          {/* Tab content */}
+          {activeTab === 'providers' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
+                Service Providers
+              </h2>
+              {providers.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400">
+                  No providers available at the moment.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {providers.map((provider) => (
+                    <ProviderCard
+                      key={provider.id}
+                      provider={provider}
+                      onSelect={() => handleViewProviderServices(provider)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'marketplace' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
+                Service Marketplace
+              </h2>
+              <p className="text-gray-500 dark:text-gray-400 mb-6">
+                Browse all available services. Submit a request and qualified providers will respond.
+              </p>
+              
+              {allServices.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400">
+                  No services available at the moment.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {allServices.map((service) => (
+                    <ServiceCard
+                      key={service.id}
+                      service={service}
+                      onSelect={() => handleGenericServiceRequest(service)}
+                      actionLabel="Request This Service"
+                      showAddToCart={false}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'services' && selectedProvider && (
+            <div>
+              <div className="mb-4 flex items-center">
+                <button 
+                  onClick={() => {
+                    setActiveTab('providers');
+                    setSelectedProvider(null);
+                  }}
+                  className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mr-2 flex items-center"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                  Back
+                </button>
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+                  Services by {selectedProvider.name}
+                </h2>
+              </div>
+
+              {selectedProvider.services.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400">
+                  No services available from this provider.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {selectedProvider.services.map((service) => (
+                    <ServiceCard
+                      key={service.id}
+                      service={service}
+                      onSelect={() => handleSelectService(service)}
+                      onAddToCart={() => handleAddToCart(service, selectedProvider)}
+                      showAddToCart={true}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'requests' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
+                My Service Requests
+              </h2>
+              
+              {requests.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400">
+                  You haven't made any service requests yet.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {requests.map((request) => (
+                    <RequestCard
+                      key={request.id}
+                      request={request}
+                      showPendingProvider={request.providerId === 'pending'}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'cart' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
+                My Shopping Cart
+              </h2>
+              <CartDisplay 
+                items={cart.items} 
+                userId={currentUser.id}
+                onUpdateCart={handleRefreshCart}
+                onCheckout={handleCheckout}
+              />
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Request Service Modal */}
+      {selectedService && selectedProvider && currentUser && (
+        <Modal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedService(null);
+          }}
+          title="Request Service"
+        >
+          <RequestForm
+            service={selectedService}
+            provider={selectedProvider}
+            userId={currentUser.id}
+            onSubmit={handleRequestService}
+            onCancel={() => {
+              setIsModalOpen(false);
+              setSelectedService(null);
+            }}
+          />
+        </Modal>
+      )}
+
+      {/* Generic Service Request Modal */}
+      {selectedService && (
+        <Modal
+          isOpen={isGenericRequestModalOpen}
+          onClose={() => {
+            setIsGenericRequestModalOpen(false);
+            setSelectedService(null);
+          }}
+          title="Request This Service"
+        >
+          <div className="p-4">
+            <div className="mb-4">
+              <h3 className="text-lg font-medium mb-1">{selectedService.name}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">${selectedService.price.toLocaleString()}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{selectedService.description}</p>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!currentUser || !selectedService) return;
+              
+              const formData = new FormData(e.currentTarget);
+              const scheduledDate = formData.get('scheduledDate') as string;
+              const notes = formData.get('notes') as string;
+              
+              submitGenericRequest({
+                serviceId: selectedService.id,
+                userId: currentUser.id,
+                notes,
+                scheduledDate
+              });
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="scheduledDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Preferred Date
+                  </label>
+                  <input
+                    type="date"
+                    id="scheduledDate"
+                    name="scheduledDate"
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    id="notes"
+                    name="notes"
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Any specific requirements or questions?"
+                  ></textarea>
+                </div>
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsGenericRequestModalOpen(false);
+                      setSelectedService(null);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                  >
+                    Submit Request
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </Modal>
+      )}
+
+      {/* Checkout Confirmation Modal */}
+      <Modal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        title="Complete Your Order"
+      >
+        <div className="p-4">
+          <p className="mb-4">
+            You're about to submit requests for all {cart.items.length} services in your cart. Would you like to proceed?
+          </p>
+          <div className="flex justify-end space-x-2">
+            <button
+              onClick={() => setIsCheckoutModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCompleteCheckout}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Confirm Order
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+} 
