@@ -143,7 +143,6 @@ export const registerUser = async (userData: Omit<User, 'id'> & { password: stri
         id: user.id,
         name: userData.name,
         email: userData.email,
-        password_hash: '', // Supabase handles password hashing
         location: userData.location,
         user_type: 'user'
       })
@@ -197,7 +196,6 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
         id: user.id,
         name: providerData.name,
         email: providerData.email,
-        password_hash: '', // Supabase handles password hashing
         location: providerData.location,
         user_type: 'provider'
       })
