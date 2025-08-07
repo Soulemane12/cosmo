@@ -33,7 +33,7 @@ export type Provider = {
   user_type: 'provider';
 };
 
-export type RequestStatus = 'pending' | 'accepted' | 'declined' | 'completed';
+export type RequestStatus = 'pending' | 'claimed' | 'accepted' | 'declined' | 'completed';
 
 export type ServiceRequest = {
   id: string;
@@ -44,6 +44,9 @@ export type ServiceRequest = {
   requestDate: string;
   scheduledDate?: string;
   notes?: string;
+  claimedAt?: string;
+  claimedBy?: string;
+  expiresAt?: string;
 };
 
 export type User = {
@@ -59,6 +62,19 @@ export type AuthUser = {
   name: string;
   email: string;
   type: 'user' | 'provider';
+};
+
+export type NotificationType = 'request_created' | 'request_claimed' | 'request_accepted' | 'request_declined' | 'request_completed';
+
+export type Notification = {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  relatedRequestId?: string;
+  isRead: boolean;
+  createdAt: string;
 };
 
 import { supabase } from '../lib/supabase';
@@ -610,7 +626,10 @@ export const getAllServiceRequests = async (): Promise<ServiceRequest[]> => {
       status: request.status,
       requestDate: request.request_date,
       scheduledDate: request.scheduled_date || undefined,
-      notes: request.notes || undefined
+      notes: request.notes || undefined,
+      claimedAt: request.claimed_at || undefined,
+      claimedBy: request.claimed_by || undefined,
+      expiresAt: request.expires_at || undefined
     }));
   } catch (error) {
     console.error('Get service requests error:', error);
@@ -638,7 +657,10 @@ export const getServiceRequestsByUserId = async (userId: string): Promise<Servic
       status: request.status,
       requestDate: request.request_date,
       scheduledDate: request.scheduled_date || undefined,
-      notes: request.notes || undefined
+      notes: request.notes || undefined,
+      claimedAt: request.claimed_at || undefined,
+      claimedBy: request.claimed_by || undefined,
+      expiresAt: request.expires_at || undefined
     }));
   } catch (error) {
     console.error('Get user service requests error:', error);
@@ -666,10 +688,77 @@ export const getServiceRequestsByProviderId = async (providerId: string): Promis
       status: request.status,
       requestDate: request.request_date,
       scheduledDate: request.scheduled_date || undefined,
-      notes: request.notes || undefined
+      notes: request.notes || undefined,
+      claimedAt: request.claimed_at || undefined,
+      claimedBy: request.claimed_by || undefined,
+      expiresAt: request.expires_at || undefined
     }));
   } catch (error) {
     console.error('Get provider service requests error:', error);
+    return [];
+  }
+};
+
+export const getUnclaimedServiceRequests = async (): Promise<ServiceRequest[]> => {
+  try {
+    const { data: requests, error } = await supabase
+      .from('service_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .is('provider_id', null);
+
+    if (error) {
+      console.error('Get unclaimed service requests error:', error);
+      return [];
+    }
+
+    return requests.map(request => ({
+      id: request.id,
+      userId: request.user_id,
+      providerId: request.provider_id,
+      serviceId: request.service_id,
+      status: request.status,
+      requestDate: request.request_date,
+      scheduledDate: request.scheduled_date || undefined,
+      notes: request.notes || undefined,
+      claimedAt: request.claimed_at || undefined,
+      claimedBy: request.claimed_by || undefined,
+      expiresAt: request.expires_at || undefined
+    }));
+  } catch (error) {
+    console.error('Get unclaimed service requests error:', error);
+    return [];
+  }
+};
+
+export const getClaimedServiceRequests = async (providerId: string): Promise<ServiceRequest[]> => {
+  try {
+    const { data: requests, error } = await supabase
+      .from('service_requests')
+      .select('*')
+      .eq('status', 'claimed')
+      .eq('claimed_by', providerId);
+
+    if (error) {
+      console.error('Get claimed service requests error:', error);
+      return [];
+    }
+
+    return requests.map(request => ({
+      id: request.id,
+      userId: request.user_id,
+      providerId: request.provider_id,
+      serviceId: request.service_id,
+      status: request.status,
+      requestDate: request.request_date,
+      scheduledDate: request.scheduled_date || undefined,
+      notes: request.notes || undefined,
+      claimedAt: request.claimed_at || undefined,
+      claimedBy: request.claimed_by || undefined,
+      expiresAt: request.expires_at || undefined
+    }));
+  } catch (error) {
+    console.error('Get claimed service requests error:', error);
     return [];
   }
 };
@@ -700,11 +789,72 @@ export const createServiceRequest = async (request: Omit<ServiceRequest, 'id'>):
       status: newRequest.status,
       requestDate: newRequest.request_date,
       scheduledDate: newRequest.scheduled_date || undefined,
-      notes: newRequest.notes || undefined
+      notes: newRequest.notes || undefined,
+      claimedAt: newRequest.claimed_at || undefined,
+      claimedBy: newRequest.claimed_by || undefined,
+      expiresAt: newRequest.expires_at || undefined
     };
   } catch (error) {
     console.error('Create service request error:', error);
     return null;
+  }
+};
+
+// New claiming system functions
+export const claimServiceRequest = async (requestId: string, providerId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.rpc('claim_service_request', {
+      request_id: requestId,
+      claiming_provider_id: providerId
+    });
+
+    if (error) {
+      console.error('Claim service request error:', error);
+      return false;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Claim service request error:', error);
+    return false;
+  }
+};
+
+export const acceptClaimedRequest = async (requestId: string, providerId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.rpc('accept_claimed_request', {
+      request_id: requestId,
+      provider_id: providerId
+    });
+
+    if (error) {
+      console.error('Accept claimed request error:', error);
+      return false;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Accept claimed request error:', error);
+    return false;
+  }
+};
+
+export const declineClaimedRequest = async (requestId: string, providerId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.rpc('decline_claimed_request', {
+      request_id: requestId,
+      provider_id: providerId
+    });
+
+    if (error) {
+      console.error('Decline claimed request error:', error);
+      return false;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Decline claimed request error:', error);
+    return false;
   }
 };
 
@@ -732,10 +882,102 @@ export const updateServiceRequestStatus = async (id: string, status: RequestStat
       status: updatedRequest.status,
       requestDate: updatedRequest.request_date,
       scheduledDate: updatedRequest.scheduled_date || undefined,
-      notes: updatedRequest.notes || undefined
+      notes: updatedRequest.notes || undefined,
+      claimedAt: updatedRequest.claimed_at || undefined,
+      claimedBy: updatedRequest.claimed_by || undefined,
+      expiresAt: updatedRequest.expires_at || undefined
     };
   } catch (error) {
     console.error('Update service request error:', error);
     return null;
+  }
+};
+
+// Notification functions
+export const getNotificationsByUserId = async (userId: string): Promise<Notification[]> => {
+  try {
+    const { data: notifications, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Get notifications error:', error);
+      return [];
+    }
+
+    return notifications.map(notification => ({
+      id: notification.id,
+      userId: notification.user_id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      relatedRequestId: notification.related_request_id || undefined,
+      isRead: notification.is_read,
+      createdAt: notification.created_at
+    }));
+  } catch (error) {
+    console.error('Get notifications error:', error);
+    return [];
+  }
+};
+
+export const markNotificationAsRead = async (notificationId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId);
+
+    if (error) {
+      console.error('Mark notification as read error:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Mark notification as read error:', error);
+    return false;
+  }
+};
+
+export const markAllNotificationsAsRead = async (userId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (error) {
+      console.error('Mark all notifications as read error:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Mark all notifications as read error:', error);
+    return false;
+  }
+};
+
+export const getUnreadNotificationCount = async (userId: string): Promise<number> => {
+  try {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (error) {
+      console.error('Get unread notification count error:', error);
+      return 0;
+    }
+
+    return count || 0;
+  } catch (error) {
+    console.error('Get unread notification count error:', error);
+    return 0;
   }
 }; 

@@ -8,7 +8,12 @@ import {
   getUserById,
   ServiceRequest,
   getAllServiceRequests,
-  getServiceById
+  getServiceById,
+  getUnclaimedServiceRequests,
+  getClaimedServiceRequests,
+  claimServiceRequest,
+  acceptClaimedRequest,
+  declineClaimedRequest
 } from '@/data/store';
 import { useAuth } from '@/data/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -33,7 +38,9 @@ export default function ServiceProviderDashboard() {
   
   const [clients, setClients] = useState<{[key: string]: ClientData}>({});
   const [marketplaceRequests, setMarketplaceRequests] = useState<ServiceRequest[]>([]);
+  const [claimedRequests, setClaimedRequests] = useState<ServiceRequest[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isClaiming, setIsClaiming] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && (!currentUser || currentUser.type !== 'provider')) {
@@ -46,21 +53,23 @@ export default function ServiceProviderDashboard() {
         setIsLoadingData(true);
         try {
           // Load all data in parallel
-          const [providerRequests, providerDetailsData, allRequests] = await Promise.all([
+          const [providerRequests, providerDetailsData, allRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
             getServiceRequestsByProviderId(currentUser.id),
             getProviderById(currentUser.id),
-            getAllServiceRequests()
+            getAllServiceRequests(),
+            getUnclaimedServiceRequests(),
+            getClaimedServiceRequests(currentUser.id)
           ]);
 
           setRequests(providerRequests);
           setProviderDetails(providerDetailsData);
+          setClaimedRequests(claimedRequestsData);
           
           // Build clients map
           await refreshClientsMap(providerRequests);
           
           // Get marketplace requests (requests without a specific provider)
-          const pendingRequests = allRequests.filter(req => req.providerId === 'pending');
-          setMarketplaceRequests(pendingRequests);
+          setMarketplaceRequests(unclaimedRequests);
         } catch (error) {
           console.error('Error loading data:', error);
         } finally {
@@ -165,31 +174,99 @@ export default function ServiceProviderDashboard() {
     });
   };
   
+  // Function to check if a claimed request is expired
+  const isClaimExpired = (request: ServiceRequest) => {
+    if (!request.expiresAt) return false;
+    return new Date(request.expiresAt) < new Date();
+  };
+  
   // Handle claiming a marketplace request
   const handleClaimRequest = async (requestId: string) => {
-    if (!currentUser || !providerDetails) return;
+    if (!currentUser) return;
     
+    setIsClaiming(requestId);
     try {
-      const request = marketplaceRequests.find(req => req.id === requestId);
-      if (!request) return;
+      const success = await claimServiceRequest(requestId, currentUser.id);
       
-      // Update the request with this provider's ID and set status to accepted
-      await updateServiceRequestStatus(requestId, 'accepted', currentUser.id);
-      
-      // Refresh requests
-      const providerRequests = await getServiceRequestsByProviderId(currentUser.id);
-      setRequests(providerRequests);
-      
-      // Remove from marketplace requests
-      setMarketplaceRequests(prev => prev.filter(req => req.id !== requestId));
-      
-      // Update clients map
-      await refreshClientsMap(providerRequests);
-      
-      alert('You have successfully claimed this service request.');
+      if (success) {
+        // Refresh data
+        const [unclaimedRequests, claimedRequestsData] = await Promise.all([
+          getUnclaimedServiceRequests(),
+          getClaimedServiceRequests(currentUser.id)
+        ]);
+        
+        setMarketplaceRequests(unclaimedRequests);
+        setClaimedRequests(claimedRequestsData);
+        
+        alert('You have successfully claimed this service request! You have 5 minutes to accept or decline.');
+        setActiveTab('claimed');
+      } else {
+        alert('This request was already claimed by another provider. Please try another request.');
+      }
     } catch (error) {
       console.error('Error claiming request:', error);
       alert('Failed to claim request. Please try again.');
+    } finally {
+      setIsClaiming(null);
+    }
+  };
+
+  // Handle accepting a claimed request
+  const handleAcceptClaimedRequest = async (requestId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const success = await acceptClaimedRequest(requestId, currentUser.id);
+      
+      if (success) {
+        // Refresh data
+        const [providerRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
+          getServiceRequestsByProviderId(currentUser.id),
+          getUnclaimedServiceRequests(),
+          getClaimedServiceRequests(currentUser.id)
+        ]);
+        
+        setRequests(providerRequests);
+        setMarketplaceRequests(unclaimedRequests);
+        setClaimedRequests(claimedRequestsData);
+        
+        // Update clients map
+        await refreshClientsMap(providerRequests);
+        
+        alert('Service request accepted successfully!');
+      } else {
+        alert('Failed to accept request. It may have expired or been claimed by another provider.');
+      }
+    } catch (error) {
+      console.error('Error accepting claimed request:', error);
+      alert('Failed to accept request. Please try again.');
+    }
+  };
+
+  // Handle declining a claimed request
+  const handleDeclineClaimedRequest = async (requestId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const success = await declineClaimedRequest(requestId, currentUser.id);
+      
+      if (success) {
+        // Refresh data
+        const [unclaimedRequests, claimedRequestsData] = await Promise.all([
+          getUnclaimedServiceRequests(),
+          getClaimedServiceRequests(currentUser.id)
+        ]);
+        
+        setMarketplaceRequests(unclaimedRequests);
+        setClaimedRequests(claimedRequestsData);
+        
+        alert('Service request declined. It is now available for other providers.');
+      } else {
+        alert('Failed to decline request. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error declining claimed request:', error);
+      alert('Failed to decline request. Please try again.');
     }
   };
 
@@ -246,10 +323,25 @@ export default function ServiceProviderDashboard() {
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
-                Marketplace
+                Available Requests
                 {getMatchingMarketplaceRequests().length > 0 && (
                   <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-purple-600 rounded-full">
                     {getMatchingMarketplaceRequests().length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('claimed')}
+                className={`py-4 px-6 text-sm font-medium ${
+                  activeTab === 'claimed'
+                    ? 'border-b-2 border-orange-500 text-orange-600 dark:text-orange-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                My Claims
+                {claimedRequests.length > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-orange-600 rounded-full">
+                    {claimedRequests.length}
                   </span>
                 )}
               </button>
@@ -271,10 +363,10 @@ export default function ServiceProviderDashboard() {
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
-                Service Requests
-                {pendingRequests.length > 0 && (
-                  <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-yellow-500 rounded-full">
-                    {pendingRequests.length}
+                Accepted Requests
+                {acceptedRequests.length > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-green-600 rounded-full">
+                    {acceptedRequests.length}
                   </span>
                 )}
               </button>
@@ -284,7 +376,70 @@ export default function ServiceProviderDashboard() {
           {/* Tab content */}
           {activeTab === 'dashboard' && (
             <div>
-              {/* Dashboard content - no changes */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    Available Requests
+                  </h3>
+                  <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                    {getMatchingMarketplaceRequests().length}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Ready to claim
+                  </p>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    My Claims
+                  </h3>
+                  <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
+                    {claimedRequests.length}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Pending response
+                  </p>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    Active Clients
+                  </h3>
+                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                    {uniqueClientsCount}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Total clients
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Quick Actions
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => setActiveTab('marketplace')}
+                    className="p-4 border border-purple-200 dark:border-purple-700 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                  >
+                    <h4 className="font-medium text-purple-900 dark:text-purple-100">Browse Available Requests</h4>
+                    <p className="text-sm text-purple-600 dark:text-purple-300 mt-1">
+                      Find new service requests to claim
+                    </p>
+                  </button>
+                  
+                  <button
+                    onClick={() => setActiveTab('claimed')}
+                    className="p-4 border border-orange-200 dark:border-orange-700 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                  >
+                    <h4 className="font-medium text-orange-900 dark:text-orange-100">Review My Claims</h4>
+                    <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
+                      Accept or decline claimed requests
+                    </p>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           
@@ -292,10 +447,10 @@ export default function ServiceProviderDashboard() {
           {activeTab === 'marketplace' && (
             <div>
               <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-                Service Marketplace
+                Available Service Requests
               </h2>
               <p className="text-gray-500 dark:text-gray-400 mb-6">
-                Browse service requests that match your specialty. Claim requests to connect with new clients.
+                Browse service requests that match your specialty. Claim requests to connect with new clients. First come, first served!
               </p>
               
               {getMatchingMarketplaceRequests().length === 0 ? (
@@ -314,7 +469,7 @@ export default function ServiceProviderDashboard() {
                     />
                   </svg>
                   <p className="mt-4 text-gray-500 dark:text-gray-400">
-                    No matching service requests available at the moment.
+                    No service requests available at the moment.
                   </p>
                 </div>
               ) : (
@@ -331,8 +486,8 @@ export default function ServiceProviderDashboard() {
                             Service ID: {request.serviceId}
                           </p>
                         </div>
-                        <span className="px-2 py-1 text-xs rounded font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                          Unclaimed
+                        <span className="px-2 py-1 text-xs rounded font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          Available
                         </span>
                       </div>
                       
@@ -355,13 +510,110 @@ export default function ServiceProviderDashboard() {
                       <div className="mt-3">
                         <button
                           onClick={() => handleClaimRequest(request.id)}
-                          className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded transition font-medium text-sm"
+                          disabled={isClaiming === request.id}
+                          className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded transition font-medium text-sm"
                         >
-                          Claim This Request
+                          {isClaiming === request.id ? 'Claiming...' : 'Claim This Request'}
                         </button>
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Claimed Requests tab */}
+          {activeTab === 'claimed' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
+                My Claimed Requests
+              </h2>
+              <p className="text-gray-500 dark:text-gray-400 mb-6">
+                You have 5 minutes to accept or decline these requests before they expire.
+              </p>
+              
+              {claimedRequests.length === 0 ? (
+                <div className="text-center p-8 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <svg 
+                    className="w-12 h-12 mx-auto text-gray-400" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth="2" 
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" 
+                    />
+                  </svg>
+                  <p className="mt-4 text-gray-500 dark:text-gray-400">
+                    No claimed requests at the moment.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {claimedRequests.map(request => {
+                    const isExpired = isClaimExpired(request);
+                    const timeLeft = request.expiresAt ? Math.max(0, Math.floor((new Date(request.expiresAt).getTime() - new Date().getTime()) / 1000 / 60)) : 0;
+                    
+                    return (
+                      <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="font-semibold text-lg">Claimed Request</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                              Request ID: {request.id}
+                            </p>
+                            <p className="text-sm text-orange-600 dark:text-orange-400">
+                              Service ID: {request.serviceId}
+                            </p>
+                          </div>
+                          <span className={`px-2 py-1 text-xs rounded font-medium ${
+                            isExpired 
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                              : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+                          }`}>
+                            {isExpired ? 'Expired' : `${timeLeft}m left`}
+                          </span>
+                        </div>
+                        
+                        <div className="text-sm mb-3">
+                          <p className="text-gray-600 dark:text-gray-300">
+                            <span className="font-medium">Requested:</span> {new Date(request.requestDate).toLocaleDateString()}
+                          </p>
+                          {request.scheduledDate && (
+                            <p className="text-gray-600 dark:text-gray-300">
+                              <span className="font-medium">Preferred Date:</span> {new Date(request.scheduledDate).toLocaleDateString()}
+                            </p>
+                          )}
+                          {request.notes && (
+                            <p className="text-gray-600 dark:text-gray-300 mt-2">
+                              <span className="font-medium">Notes:</span> {request.notes}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={() => handleAcceptClaimedRequest(request.id)}
+                            disabled={isExpired}
+                            className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded transition font-medium text-sm"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => handleDeclineClaimedRequest(request.id)}
+                            disabled={isExpired}
+                            className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded transition font-medium text-sm"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

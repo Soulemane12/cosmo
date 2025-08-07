@@ -3,7 +3,8 @@ ALTER DATABASE postgres SET "app.jwt_secret" TO 'your-jwt-secret-here';
 
 -- Create custom types
 CREATE TYPE user_type AS ENUM ('user', 'provider');
-CREATE TYPE request_status AS ENUM ('pending', 'accepted', 'declined', 'completed');
+CREATE TYPE request_status AS ENUM ('pending', 'claimed', 'accepted', 'declined', 'completed');
+CREATE TYPE notification_type AS ENUM ('request_created', 'request_claimed', 'request_accepted', 'request_declined', 'request_completed');
 
 -- Users table (for both regular users and providers)
 CREATE TABLE users (
@@ -61,7 +62,7 @@ CREATE TABLE cart_items (
   UNIQUE(cart_id, service_id)
 );
 
--- Service requests
+-- Service requests (updated for first-come-first-served)
 CREATE TABLE service_requests (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -71,8 +72,23 @@ CREATE TABLE service_requests (
   request_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   scheduled_date TIMESTAMP WITH TIME ZONE,
   notes TEXT,
+  claimed_at TIMESTAMP WITH TIME ZONE,
+  claimed_by UUID REFERENCES users(id),
+  expires_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Notifications table for real-time updates
+CREATE TABLE notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  type notification_type NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  related_request_id UUID REFERENCES service_requests(id) ON DELETE CASCADE,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create indexes for better performance
@@ -80,7 +96,11 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_services_provider_id ON services(provider_id);
 CREATE INDEX idx_service_requests_user_id ON service_requests(user_id);
 CREATE INDEX idx_service_requests_provider_id ON service_requests(provider_id);
+CREATE INDEX idx_service_requests_status ON service_requests(status);
+CREATE INDEX idx_service_requests_claimed_by ON service_requests(claimed_by);
 CREATE INDEX idx_cart_items_cart_id ON cart_items(cart_id);
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_is_read ON notifications(is_read);
 
 -- Enable Row Level Security
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -89,6 +109,7 @@ ALTER TABLE provider_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE carts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users
 CREATE POLICY "Users can view their own profile" ON users
@@ -163,11 +184,24 @@ CREATE POLICY "Users can view their own requests" ON service_requests
 CREATE POLICY "Providers can view requests for their services" ON service_requests
   FOR SELECT USING (auth.uid() = provider_id);
 
+CREATE POLICY "Providers can view unclaimed requests" ON service_requests
+  FOR SELECT USING (status = 'pending' AND provider_id IS NULL);
+
 CREATE POLICY "Users can create requests" ON service_requests
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Providers can update requests for their services" ON service_requests
-  FOR UPDATE USING (auth.uid() = provider_id);
+CREATE POLICY "Providers can claim requests" ON service_requests
+  FOR UPDATE USING (auth.uid() = claimed_by AND status = 'pending');
+
+CREATE POLICY "Providers can update claimed requests" ON service_requests
+  FOR UPDATE USING (auth.uid() = claimed_by);
+
+-- RLS Policies for notifications
+CREATE POLICY "Users can view their own notifications" ON notifications
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own notifications" ON notifications
+  FOR UPDATE USING (auth.uid() = user_id);
 
 -- Create functions for automatic timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -195,4 +229,203 @@ CREATE TRIGGER update_cart_items_updated_at BEFORE UPDATE ON cart_items
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_service_requests_updated_at BEFORE UPDATE ON service_requests
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column(); 
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to claim a service request (first-come-first-served)
+CREATE OR REPLACE FUNCTION claim_service_request(
+  request_id UUID,
+  claiming_provider_id UUID
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  request_exists BOOLEAN;
+  already_claimed BOOLEAN;
+BEGIN
+  -- Check if request exists and is still pending
+  SELECT EXISTS(
+    SELECT 1 FROM service_requests 
+    WHERE id = request_id 
+    AND status = 'pending' 
+    AND (claimed_by IS NULL OR claimed_by = claiming_provider_id)
+  ) INTO request_exists;
+  
+  IF NOT request_exists THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Try to claim the request
+  UPDATE service_requests 
+  SET 
+    status = 'claimed',
+    claimed_by = claiming_provider_id,
+    claimed_at = NOW(),
+    expires_at = NOW() + INTERVAL '5 minutes'
+  WHERE id = request_id 
+    AND status = 'pending' 
+    AND (claimed_by IS NULL OR claimed_by = claiming_provider_id);
+  
+  -- Check if update was successful
+  GET DIAGNOSTICS request_exists = ROW_COUNT;
+  
+  IF request_exists > 0 THEN
+    -- Create notification for the user
+    INSERT INTO notifications (user_id, type, title, message, related_request_id)
+    SELECT 
+      user_id,
+      'request_claimed'::notification_type,
+      'Service Request Claimed',
+      'Your service request has been claimed by a provider. They have 5 minutes to accept or decline.',
+      request_id
+    FROM service_requests WHERE id = request_id;
+    
+    RETURN TRUE;
+  END IF;
+  
+  RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to accept a claimed request
+CREATE OR REPLACE FUNCTION accept_claimed_request(
+  request_id UUID,
+  provider_id UUID
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  request_exists BOOLEAN;
+BEGIN
+  -- Check if request is claimed by this provider and not expired
+  SELECT EXISTS(
+    SELECT 1 FROM service_requests 
+    WHERE id = request_id 
+    AND status = 'claimed' 
+    AND claimed_by = provider_id
+    AND expires_at > NOW()
+  ) INTO request_exists;
+  
+  IF NOT request_exists THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Accept the request
+  UPDATE service_requests 
+  SET 
+    status = 'accepted',
+    provider_id = provider_id
+  WHERE id = request_id 
+    AND status = 'claimed' 
+    AND claimed_by = provider_id
+    AND expires_at > NOW();
+  
+  -- Check if update was successful
+  GET DIAGNOSTICS request_exists = ROW_COUNT;
+  
+  IF request_exists > 0 THEN
+    -- Create notification for the user
+    INSERT INTO notifications (user_id, type, title, message, related_request_id)
+    SELECT 
+      user_id,
+      'request_accepted'::notification_type,
+      'Service Request Accepted',
+      'Your service request has been accepted by a provider.',
+      request_id
+    FROM service_requests WHERE id = request_id;
+    
+    RETURN TRUE;
+  END IF;
+  
+  RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to decline a claimed request
+CREATE OR REPLACE FUNCTION decline_claimed_request(
+  request_id UUID,
+  provider_id UUID
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  request_exists BOOLEAN;
+BEGIN
+  -- Check if request is claimed by this provider
+  SELECT EXISTS(
+    SELECT 1 FROM service_requests 
+    WHERE id = request_id 
+    AND status = 'claimed' 
+    AND claimed_by = provider_id
+  ) INTO request_exists;
+  
+  IF NOT request_exists THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Reset the request to pending
+  UPDATE service_requests 
+  SET 
+    status = 'pending',
+    claimed_by = NULL,
+    claimed_at = NULL,
+    expires_at = NULL
+  WHERE id = request_id 
+    AND status = 'claimed' 
+    AND claimed_by = provider_id;
+  
+  -- Check if update was successful
+  GET DIAGNOSTICS request_exists = ROW_COUNT;
+  
+  IF request_exists > 0 THEN
+    -- Create notification for the user
+    INSERT INTO notifications (user_id, type, title, message, related_request_id)
+    SELECT 
+      user_id,
+      'request_declined'::notification_type,
+      'Service Request Declined',
+      'A provider has declined your service request. It is now available for other providers.',
+      request_id
+    FROM service_requests WHERE id = request_id;
+    
+    RETURN TRUE;
+  END IF;
+  
+  RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to clean up expired claims (run periodically)
+CREATE OR REPLACE FUNCTION cleanup_expired_claims()
+RETURNS INTEGER AS $$
+DECLARE
+  expired_count INTEGER;
+BEGIN
+  -- Reset expired claims back to pending
+  UPDATE service_requests 
+  SET 
+    status = 'pending',
+    claimed_by = NULL,
+    claimed_at = NULL,
+    expires_at = NULL
+  WHERE status = 'claimed' 
+    AND expires_at < NOW();
+  
+  GET DIAGNOSTICS expired_count = ROW_COUNT;
+  
+  -- Create notifications for expired claims
+  INSERT INTO notifications (user_id, type, title, message, related_request_id)
+  SELECT 
+    user_id,
+    'request_declined'::notification_type,
+    'Service Request Expired',
+    'A provider did not respond to your service request in time. It is now available for other providers.',
+    id
+  FROM service_requests 
+  WHERE status = 'pending' 
+    AND claimed_by IS NULL
+    AND id IN (
+      SELECT id FROM service_requests 
+      WHERE status = 'claimed' 
+        AND expires_at < NOW()
+    );
+  
+  RETURN expired_count;
+END;
+$$ LANGUAGE plpgsql; 

@@ -35,7 +35,7 @@ export default function RequestCard({
       try {
         const [serviceData, providerData, userData] = await Promise.all([
           getServiceById(request.serviceId),
-          getProviderById(request.providerId),
+          request.providerId && request.providerId !== 'pending' ? getProviderById(request.providerId) : Promise.resolve(null),
           getUserById(request.userId)
         ]);
 
@@ -72,6 +72,8 @@ export default function RequestCard({
     switch (status) {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      case 'claimed':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
       case 'accepted':
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
       case 'declined':
@@ -82,6 +84,29 @@ export default function RequestCard({
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
     }
   };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'claimed':
+        return 'Claimed';
+      case 'pending':
+        return 'Pending';
+      case 'accepted':
+        return 'Accepted';
+      case 'declined':
+        return 'Declined';
+      case 'completed':
+        return 'Completed';
+      default:
+        return status.charAt(0).toUpperCase() + status.slice(1);
+    }
+  };
+
+  // Check if claim is expired
+  const isClaimExpired = request.status === 'claimed' && request.expiresAt && new Date(request.expiresAt) < new Date();
+  const timeLeft = request.expiresAt && request.status === 'claimed' 
+    ? Math.max(0, Math.floor((new Date(request.expiresAt).getTime() - new Date().getTime()) / 1000 / 60))
+    : 0;
 
   return (
     <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 p-4">
@@ -106,9 +131,22 @@ export default function RequestCard({
             )
           )}
         </div>
-        <span className={`px-2 py-1 text-xs rounded font-medium ${getStatusBadgeColor(request.status)}`}>
-          {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-        </span>
+        <div className="text-right">
+          <span className={`px-2 py-1 text-xs rounded font-medium ${getStatusBadgeColor(request.status)}`}>
+            {getStatusText(request.status)}
+          </span>
+          {request.status === 'claimed' && (
+            <div className="mt-1">
+              <span className={`text-xs ${
+                isClaimExpired 
+                  ? 'text-red-600 dark:text-red-400' 
+                  : 'text-orange-600 dark:text-orange-400'
+              }`}>
+                {isClaimExpired ? 'Expired' : `${timeLeft}m left`}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
       
       <div className="text-sm mb-3">

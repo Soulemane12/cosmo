@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import React, { useState } from 'react';
 import { useAuth } from '@/data/AuthContext';
+import NotificationBell from './NotificationBell';
 
 interface AppHeaderProps {
   currentPath: string;
@@ -72,67 +73,70 @@ export default function AppHeader({ currentPath }: AppHeaderProps) {
           
           <div className="flex items-center">
             {currentUser ? (
-              <div className="relative ml-3">
-                <div>
-                  <button
-                    onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="flex max-w-xs items-center rounded-full bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                  >
-                    <div className="flex items-center">
-                      <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
-                        {currentUser.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="ml-2 text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        {currentUser.name}
-                      </span>
-                      <svg
-                        className="ml-1 h-5 w-5 text-gray-400"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        aria-hidden="true"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  </button>
-                </div>
-                
-                {showUserMenu && (
-                  <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white dark:bg-gray-800 py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    <p className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b dark:border-gray-700">
-                      Signed in as<br />
-                      <span className="font-medium">{currentUser.email}</span>
-                    </p>
-                    {currentUser.type === 'user' && (
-                      <Link
-                        href="/user"
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setShowUserMenu(false)}
-                      >
-                        Dashboard
-                      </Link>
-                    )}
-                    {currentUser.type === 'provider' && (
-                      <Link
-                        href="/service_provider"
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setShowUserMenu(false)}
-                      >
-                        Dashboard
-                      </Link>
-                    )}
+              <div className="flex items-center space-x-4">
+                <NotificationBell className="text-white" />
+                <div className="relative ml-3">
+                  <div>
                     <button
-                      onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      onClick={() => setShowUserMenu(!showUserMenu)}
+                      className="flex max-w-xs items-center rounded-full bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     >
-                      Log out
+                      <div className="flex items-center">
+                        <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
+                          {currentUser.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="ml-2 text-gray-700 dark:text-gray-300 text-sm font-medium">
+                          {currentUser.name}
+                        </span>
+                        <svg
+                          className="ml-1 h-5 w-5 text-gray-400"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
                     </button>
                   </div>
-                )}
+                  
+                  {showUserMenu && (
+                    <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white dark:bg-gray-800 py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                      <p className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b dark:border-gray-700">
+                        Signed in as<br />
+                        <span className="font-medium">{currentUser.email}</span>
+                      </p>
+                      {currentUser.type === 'user' && (
+                        <Link
+                          href="/user"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          Dashboard
+                        </Link>
+                      )}
+                      {currentUser.type === 'provider' && (
+                        <Link
+                          href="/service_provider"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          Dashboard
+                        </Link>
+                      )}
+                      <button
+                        onClick={handleLogout}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        Log out
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="flex items-center space-x-4">
