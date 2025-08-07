@@ -489,7 +489,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
 };
 
 // Cart functions
-const createCartForUser = async (userId: string): Promise<string | null> => {
+export const createCartForUser = async (userId: string): Promise<string | null> => {
   try {
     const { data: cart, error } = await supabase
       .from('carts')

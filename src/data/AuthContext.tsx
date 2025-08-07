@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AuthUser, loginUser, registerUser, registerProvider } from './store';
+import { AuthUser, loginUser, registerUser, registerProvider, createCartForUser } from './store';
 import { supabase } from '../lib/supabase';
 import { signInUser } from '../lib/auth';
 
@@ -67,14 +67,54 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       // Get user details from our users table
-      const { data: userDetails, error } = await supabase
+      let { data: userDetails, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', user.id)
         .single();
 
+      // If user doesn't exist in our table (e.g., after email confirmation), create their profile
       if (error || !userDetails) {
-        return null;
+        // Get user metadata from auth
+        const userMetadata = user.user_metadata;
+        const userType = userMetadata?.user_type || 'user';
+        const name = userMetadata?.name || user.email?.split('@')[0] || 'User';
+        const location = userMetadata?.location || '';
+
+        // Create user profile
+        const { data: newUser, error: createError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            name: name,
+            email: user.email || '',
+            location: location,
+            user_type: userType
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Failed to create user profile:', createError);
+          return null;
+        }
+
+        userDetails = newUser;
+
+        // If this is a provider, create their provider profile
+        if (userType === 'provider') {
+          const specialty = userMetadata?.specialty || '';
+          await supabase
+            .from('provider_profiles')
+            .insert({
+              user_id: user.id,
+              specialty: specialty,
+              rating: 0
+            });
+        }
+
+        // Create cart for new user
+        await createCartForUser(user.id);
       }
 
       const authUser = {
