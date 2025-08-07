@@ -117,7 +117,7 @@ export const loginUser = async (email: string, password: string): Promise<AuthUs
   }
 };
 
-export const registerUser = async (userData: Omit<User, 'id'> & { password: string }): Promise<User | null> => {
+export const registerUser = async (userData: Omit<User, 'id'> & { password: string }): Promise<{ success: boolean; user?: User; error?: string; requiresEmailConfirmation?: boolean }> => {
   try {
     // First, sign up with Supabase auth using the actual password
     const result = await signUpUser(userData.email, userData.password, {
@@ -126,14 +126,31 @@ export const registerUser = async (userData: Omit<User, 'id'> & { password: stri
       user_type: 'user'
     });
 
-    if (!result.success || !result.data) {
-      console.error('Registration error:', result.error);
-      return null;
+    if (!result.success) {
+      return { success: false, error: result.error || 'Registration failed' };
     }
 
-    const user = result.data.user;
+    const user = result.data?.user;
     if (!user) {
-      return null;
+      return { success: false, error: 'No user data returned from registration' };
+    }
+
+    // If email confirmation is required, return early with a message
+    if (result.requiresEmailConfirmation) {
+      return { 
+        success: false, 
+        error: result.message || 'Email confirmation required',
+        requiresEmailConfirmation: true
+      };
+    }
+
+    // Only try to create user record if we have an authenticated session
+    if (!result.data?.session) {
+      return { 
+        success: false, 
+        error: 'Authentication session not available. Please confirm your email and try again.',
+        requiresEmailConfirmation: true
+      };
     }
 
     // Create user record in the users table
@@ -151,26 +168,29 @@ export const registerUser = async (userData: Omit<User, 'id'> & { password: stri
 
     if (error) {
       console.error('User creation error:', error);
-      return null;
+      return { success: false, error: `Failed to create user profile: ${error.message}` };
     }
 
     // Create a cart for the new user
     await createCartForUser(newUser.id);
 
     return {
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email,
-      location: newUser.location,
-      user_type: newUser.user_type
+      success: true,
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        location: newUser.location,
+        user_type: newUser.user_type
+      }
     };
   } catch (error) {
     console.error('Registration error:', error);
-    return null;
+    return { success: false, error: 'An unexpected error occurred during registration' };
   }
 };
 
-export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rating' | 'services'> & { password: string }): Promise<Provider | null> => {
+export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rating' | 'services'> & { password: string }): Promise<{ success: boolean; provider?: Provider; error?: string; requiresEmailConfirmation?: boolean }> => {
   try {
     // First, sign up with Supabase auth using the actual password
     const result = await signUpUser(providerData.email, providerData.password, {
@@ -179,14 +199,31 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
       user_type: 'provider'
     });
 
-    if (!result.success || !result.data) {
-      console.error('Provider registration error:', result.error);
-      return null;
+    if (!result.success) {
+      return { success: false, error: result.error || 'Provider registration failed' };
     }
 
-    const user = result.data.user;
+    const user = result.data?.user;
     if (!user) {
-      return null;
+      return { success: false, error: 'No user data returned from registration' };
+    }
+
+    // If email confirmation is required, return early with a message
+    if (result.requiresEmailConfirmation) {
+      return { 
+        success: false, 
+        error: result.message || 'Email confirmation required',
+        requiresEmailConfirmation: true
+      };
+    }
+
+    // Only try to create user record if we have an authenticated session
+    if (!result.data?.session) {
+      return { 
+        success: false, 
+        error: 'Authentication session not available. Please confirm your email and try again.',
+        requiresEmailConfirmation: true
+      };
     }
 
     // Create user record in the users table
@@ -204,7 +241,7 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
 
     if (userError) {
       console.error('Provider user creation error:', userError);
-      return null;
+      return { success: false, error: `Failed to create provider profile: ${userError.message}` };
     }
 
     // Create provider profile
@@ -218,22 +255,25 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
 
     if (profileError) {
       console.error('Provider profile creation error:', profileError);
-      return null;
+      return { success: false, error: `Failed to create provider profile: ${profileError.message}` };
     }
 
     return {
-      id: newUser.id,
-      name: newUser.name,
-      specialty: providerData.specialty,
-      rating: 0,
-      location: newUser.location,
-      services: [],
-      email: newUser.email,
-      user_type: 'provider'
+      success: true,
+      provider: {
+        id: newUser.id,
+        name: newUser.name,
+        specialty: providerData.specialty,
+        rating: 0,
+        location: newUser.location,
+        services: [],
+        email: newUser.email,
+        user_type: 'provider'
+      }
     };
   } catch (error) {
     console.error('Provider registration error:', error);
-    return null;
+    return { success: false, error: 'An unexpected error occurred during provider registration' };
   }
 };
 

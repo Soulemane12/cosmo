@@ -15,6 +15,7 @@ export default function SignupForm() {
   const [userType, setUserType] = useState<'user' | 'provider'>('user');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [requiresEmailConfirmation, setRequiresEmailConfirmation] = useState(false);
   const { registerNewUser, registerNewProvider, isLoading } = useAuth();
   const router = useRouter();
 
@@ -22,6 +23,7 @@ export default function SignupForm() {
     e.preventDefault();
     setError('');
     setSuccess(false);
+    setRequiresEmailConfirmation(false);
 
     // Validation
     if (!name || !email || !password || !confirmPassword || !location || (userType === 'provider' && !specialty)) {
@@ -40,20 +42,26 @@ export default function SignupForm() {
     }
 
     try {
-      let success;
+      let result;
       if (userType === 'user') {
-        success = await registerNewUser(name, email, password, location);
+        result = await registerNewUser(name, email, password, location);
       } else {
-        success = await registerNewProvider(name, email, password, location, specialty);
+        result = await registerNewProvider(name, email, password, location, specialty);
       }
 
-      if (success) {
+      if (result.success) {
         setSuccess(true);
         setTimeout(() => {
           router.push('/login');
         }, 1500);
       } else {
-        setError('Registration failed. Please try again.');
+        if (result.requiresEmailConfirmation) {
+          setRequiresEmailConfirmation(true);
+          setSuccess(true);
+          setError('');
+        } else {
+          setError(result.error || 'Registration failed. Please try again.');
+        }
       }
     } catch (err) {
       setError('An error occurred during registration');
@@ -74,7 +82,12 @@ export default function SignupForm() {
 
       {success && (
         <div className="bg-green-900 border border-green-800 text-green-200 px-4 py-3 rounded mb-4 relative" role="alert">
-          <span className="block sm:inline">Registration successful! Redirecting to login...</span>
+          <span className="block sm:inline">
+            {requiresEmailConfirmation 
+              ? 'Account created successfully! Please check your email to confirm your account before signing in.'
+              : 'Registration successful! Redirecting to login...'
+            }
+          </span>
         </div>
       )}
       

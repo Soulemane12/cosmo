@@ -14,7 +14,6 @@ export type Database = {
           id: string
           name: string
           email: string
-          password_hash: string
           location: string
           user_type: 'user' | 'provider'
           created_at: string
@@ -24,7 +23,6 @@ export type Database = {
           id?: string
           name: string
           email: string
-          password_hash: string
           location: string
           user_type?: 'user' | 'provider'
           created_at?: string
@@ -34,7 +32,6 @@ export type Database = {
           id?: string
           name?: string
           email?: string
-          password_hash?: string
           location?: string
           user_type?: 'user' | 'provider'
           created_at?: string

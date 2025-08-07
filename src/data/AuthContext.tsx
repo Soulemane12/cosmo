@@ -9,8 +9,8 @@ interface AuthContextType {
   currentUser: AuthUser | null;
   login: (email: string, password: string) => Promise<AuthUser | null>;
   logout: () => void;
-  registerNewUser: (name: string, email: string, password: string, location: string) => Promise<boolean>;
-  registerNewProvider: (name: string, email: string, password: string, location: string, specialty: string) => Promise<boolean>;
+  registerNewUser: (name: string, email: string, password: string, location: string) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
+  registerNewProvider: (name: string, email: string, password: string, location: string, specialty: string) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
   isLoading: boolean;
 }
 
@@ -108,27 +108,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     email: string,
     password: string,
     location: string
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }> => {
     setIsLoading(true);
     try {
-      const user = await registerUser({ name, email, location, user_type: 'user', password });
-      if (user) {
+      const result = await registerUser({ name, email, location, user_type: 'user', password });
+      
+      if (result.success && result.user) {
         // Sign in the user after registration
         const loginResult = await signInUser(email, password);
         if (loginResult.success && loginResult.data) {
           setCurrentUser({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            type: user.user_type
+            id: result.user.id,
+            name: result.user.name,
+            email: result.user.email,
+            type: result.user.user_type
           });
         }
-        return true;
+        return { success: true };
       }
-      return false;
+      
+      return { 
+        success: false, 
+        error: result.error || 'Failed to register user',
+        requiresEmailConfirmation: result.requiresEmailConfirmation
+      };
     } catch (error) {
       console.error('Registration error:', error);
-      return false;
+      return { success: false, error: 'Registration failed' };
     } finally {
       setIsLoading(false);
     }
@@ -140,10 +146,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     password: string,
     location: string,
     specialty: string
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }> => {
     setIsLoading(true);
     try {
-      const provider = await registerProvider({ 
+      const result = await registerProvider({ 
         name, 
         email, 
         location, 
@@ -151,23 +157,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         user_type: 'provider',
         password
       });
-      if (provider) {
+      
+      if (result.success && result.provider) {
         // Sign in the provider after registration
         const loginResult = await signInUser(email, password);
         if (loginResult.success && loginResult.data) {
           setCurrentUser({
-            id: provider.id,
-            name: provider.name,
-            email: provider.email,
-            type: provider.user_type
+            id: result.provider.id,
+            name: result.provider.name,
+            email: result.provider.email,
+            type: result.provider.user_type
           });
         }
-        return true;
+        return { success: true };
       }
-      return false;
+      
+      return { 
+        success: false, 
+        error: result.error || 'Failed to register provider',
+        requiresEmailConfirmation: result.requiresEmailConfirmation
+      };
     } catch (error) {
       console.error('Provider registration error:', error);
-      return false;
+      return { success: false, error: 'Provider registration failed' };
     } finally {
       setIsLoading(false);
     }

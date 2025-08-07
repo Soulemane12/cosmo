@@ -24,6 +24,16 @@ export const signUpUser = async (email: string, password: string, userData: {
       return { success: false, error: error.message };
     }
 
+    // Check if email confirmation is required
+    if (data.user && !data.session) {
+      return { 
+        success: true, 
+        data, 
+        requiresEmailConfirmation: true,
+        message: 'Please check your email to confirm your account before signing in.'
+      };
+    }
+
     return { success: true, data };
   } catch (error) {
     console.error('Sign up error:', error);
