@@ -27,7 +27,7 @@ import { Provider, User } from '@/data/store';
 export default function ServiceProviderDashboard() {
   const { currentUser, isLoading } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'services' | 'requests' | 'marketplace'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'services' | 'requests' | 'marketplace' | 'claimed'>('dashboard');
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [providerDetails, setProviderDetails] = useState<Provider | null>(null);
   const [isAddServiceModalOpen, setIsAddServiceModalOpen] = useState(false);
