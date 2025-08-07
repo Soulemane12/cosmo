@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createNewService } from '@/data/store';
 
 interface AddServiceFormProps {
@@ -14,6 +14,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
+  const [selectedProcedure, setSelectedProcedure] = useState('');
   const [error, setError] = useState('');
   
   const categoryOptions = [
@@ -33,6 +34,10 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     // Validation
     if (!name || !description || !price || !category) {
       setError('Please fill in all fields');
+      return;
+    }
+    if (category === 'Surgical' && !selectedProcedure) {
+      setError('Please select a surgical procedure');
       return;
     }
     
@@ -61,6 +66,79 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     }
   };
 
+  const surgicalProcedures = useMemo(
+    () => [
+      // Facial procedures
+      'Rhinoplasty (Nose Surgery)',
+      'Septoplasty (Deviated Septum Repair)',
+      'Blepharoplasty (Eyelid Surgery)',
+      'Brow Lift (Forehead Lift)',
+      'Facelift (Rhytidectomy)',
+      'Neck Lift (Platysmaplasty)',
+      'Otoplasty (Ear Reshaping)',
+      'Chin Augmentation (Genioplasty)',
+      'Cheek Augmentation (Malar Implant)',
+      'Lip Lift',
+      'Facial Fat Transfer',
+      'Facial Feminization Surgery (FFS)',
+
+      // Breast procedures
+      'Breast Augmentation (Implants/Fat Transfer)',
+      'Breast Lift (Mastopexy)',
+      'Breast Reduction',
+      'Breast Implant Removal/Exchange',
+      'Breast Revision',
+      'Gynecomastia Surgery (Male Breast Reduction)',
+
+      // Body contouring
+      'Liposuction',
+      'High-Definition Liposuction (HD Lipo)',
+      'Tummy Tuck (Abdominoplasty)',
+      'Mini Tummy Tuck',
+      '360 Body Lift',
+      'Lower Body Lift',
+      'Arm Lift (Brachioplasty)',
+      'Thigh Lift',
+      'Brazilian Butt Lift (BBL)',
+      'Buttock Implants',
+      'Mommy Makeover',
+
+      // Intimate procedures
+      'Labiaplasty',
+      'Vaginoplasty',
+      'Monsplasty',
+
+      // Reconstructive & other
+      'Scar Revision Surgery',
+      'Mohs Reconstruction',
+      'Skin Cancer Reconstruction',
+      'Hand Surgery',
+      'Implant-Based Reconstruction',
+
+      // Gender-affirming
+      'Top Surgery (FTM/FTN Chest Masculinization)',
+      'Breast Augmentation for Transfeminine Patients',
+
+      // Nasal airways & function
+      'Functional Rhinoplasty',
+
+      // Additive common requests
+      'Earlobe Repair',
+      'Buccal Fat Removal',
+      'Submental Liposuction (Neck Lipo)',
+
+      'Other (custom)'
+    ],
+    []
+  );
+
+  const handleProcedureChange = (value: string) => {
+    setSelectedProcedure(value);
+    if (value && value !== 'Other (custom)') {
+      setName(value);
+    }
+  };
+
   return (
     <div className="bg-gray-800 p-6 rounded-lg shadow">
       <h2 className="text-xl font-bold mb-4 text-white">Add New Service</h2>
@@ -85,6 +163,11 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
             placeholder="e.g., Botox, Rhinoplasty"
             required
           />
+          {category === 'Surgical' && (
+            <p className="mt-1 text-xs text-gray-400">
+              Tip: Selecting a procedure below will auto-fill this name.
+            </p>
+          )}
         </div>
         
         <div>
@@ -130,7 +213,13 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
             <select
               id="category"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setCategory(value);
+                if (value !== 'Surgical') {
+                  setSelectedProcedure('');
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
               required
             >
@@ -143,6 +232,28 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
             </select>
           </div>
         </div>
+
+        {category === 'Surgical' && (
+          <div>
+            <label htmlFor="procedure" className="block text-sm font-medium text-gray-300 mb-1">
+              Surgical Procedure
+            </label>
+            <select
+              id="procedure"
+              value={selectedProcedure}
+              onChange={(e) => handleProcedureChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
+              required
+            >
+              <option value="">Select a surgical procedure</option>
+              {surgicalProcedures.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         
         <div className="flex justify-end space-x-2 pt-4">
           <button
