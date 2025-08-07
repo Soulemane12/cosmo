@@ -1,17 +1,21 @@
 -- Enable Row Level Security
 ALTER DATABASE postgres SET "app.jwt_secret" TO 'your-jwt-secret-here';
 
+-- Drop existing types if they exist (for clean reinstall)
+DROP TYPE IF EXISTS user_type CASCADE;
+DROP TYPE IF EXISTS request_status CASCADE;
+DROP TYPE IF EXISTS notification_type CASCADE;
+
 -- Create custom types
 CREATE TYPE user_type AS ENUM ('user', 'provider');
 CREATE TYPE request_status AS ENUM ('pending', 'claimed', 'accepted', 'declined', 'completed');
 CREATE TYPE notification_type AS ENUM ('request_created', 'request_claimed', 'request_accepted', 'request_declined', 'request_completed');
 
 -- Users table (for both regular users and providers)
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
   location VARCHAR(255) NOT NULL,
   user_type user_type NOT NULL DEFAULT 'user',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -19,7 +23,7 @@ CREATE TABLE users (
 );
 
 -- Services table
-CREATE TABLE services (
+CREATE TABLE IF NOT EXISTS services (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   description TEXT,
@@ -32,7 +36,7 @@ CREATE TABLE services (
 );
 
 -- Provider profiles (additional info for providers)
-CREATE TABLE provider_profiles (
+CREATE TABLE IF NOT EXISTS provider_profiles (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
   specialty VARCHAR(255) NOT NULL,
@@ -43,7 +47,7 @@ CREATE TABLE provider_profiles (
 );
 
 -- Shopping carts
-CREATE TABLE carts (
+CREATE TABLE IF NOT EXISTS carts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -51,7 +55,7 @@ CREATE TABLE carts (
 );
 
 -- Cart items
-CREATE TABLE cart_items (
+CREATE TABLE IF NOT EXISTS cart_items (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   cart_id UUID REFERENCES carts(id) ON DELETE CASCADE,
   service_id UUID REFERENCES services(id) ON DELETE CASCADE,
@@ -63,7 +67,7 @@ CREATE TABLE cart_items (
 );
 
 -- Service requests (updated for first-come-first-served)
-CREATE TABLE service_requests (
+CREATE TABLE IF NOT EXISTS service_requests (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   provider_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -79,8 +83,48 @@ CREATE TABLE service_requests (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Add missing columns to existing service_requests table if needed
+DO $$ 
+BEGIN
+  -- Add claimed_at column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'service_requests' AND column_name = 'claimed_at') THEN
+    ALTER TABLE service_requests ADD COLUMN claimed_at TIMESTAMP WITH TIME ZONE;
+  END IF;
+  
+  -- Add claimed_by column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'service_requests' AND column_name = 'claimed_by') THEN
+    ALTER TABLE service_requests ADD COLUMN claimed_by UUID REFERENCES users(id);
+  END IF;
+  
+  -- Add expires_at column if it doesn't exist
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'service_requests' AND column_name = 'expires_at') THEN
+    ALTER TABLE service_requests ADD COLUMN expires_at TIMESTAMP WITH TIME ZONE;
+  END IF;
+  
+  -- Update status column type if it exists but is not the correct enum type
+  IF EXISTS (SELECT 1 FROM information_schema.columns 
+             WHERE table_name = 'service_requests' AND column_name = 'status') THEN
+    -- Check if the column is already the correct type
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'service_requests' 
+                   AND column_name = 'status' 
+                   AND data_type = 'USER-DEFINED' 
+                   AND udt_name = 'request_status') THEN
+      -- Convert existing status values to new enum
+      ALTER TABLE service_requests ALTER COLUMN status TYPE request_status 
+        USING status::text::request_status;
+    END IF;
+  ELSE
+    -- Add status column if it doesn't exist
+    ALTER TABLE service_requests ADD COLUMN status request_status NOT NULL DEFAULT 'pending';
+  END IF;
+END $$;
+
 -- Notifications table for real-time updates
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   type notification_type NOT NULL,
@@ -91,16 +135,45 @@ CREATE TABLE notifications (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for better performance
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_services_provider_id ON services(provider_id);
-CREATE INDEX idx_service_requests_user_id ON service_requests(user_id);
-CREATE INDEX idx_service_requests_provider_id ON service_requests(provider_id);
-CREATE INDEX idx_service_requests_status ON service_requests(status);
-CREATE INDEX idx_service_requests_claimed_by ON service_requests(claimed_by);
-CREATE INDEX idx_cart_items_cart_id ON cart_items(cart_id);
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_is_read ON notifications(is_read);
+-- Create indexes for better performance (only if they don't exist)
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_users_email') THEN
+    CREATE INDEX idx_users_email ON users(email);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_services_provider_id') THEN
+    CREATE INDEX idx_services_provider_id ON services(provider_id);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_service_requests_user_id') THEN
+    CREATE INDEX idx_service_requests_user_id ON service_requests(user_id);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_service_requests_provider_id') THEN
+    CREATE INDEX idx_service_requests_provider_id ON service_requests(provider_id);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_service_requests_status') THEN
+    CREATE INDEX idx_service_requests_status ON service_requests(status);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_service_requests_claimed_by') THEN
+    CREATE INDEX idx_service_requests_claimed_by ON service_requests(claimed_by);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_cart_items_cart_id') THEN
+    CREATE INDEX idx_cart_items_cart_id ON cart_items(cart_id);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_user_id') THEN
+    CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_notifications_is_read') THEN
+    CREATE INDEX idx_notifications_is_read ON notifications(is_read);
+  END IF;
+END $$;
 
 -- Enable Row Level Security
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -110,6 +183,31 @@ ALTER TABLE carts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their own profile" ON users;
+DROP POLICY IF EXISTS "Users can update their own profile" ON users;
+DROP POLICY IF EXISTS "Anyone can view provider profiles" ON users;
+DROP POLICY IF EXISTS "Anyone can view services" ON services;
+DROP POLICY IF EXISTS "Providers can create their own services" ON services;
+DROP POLICY IF EXISTS "Providers can update their own services" ON services;
+DROP POLICY IF EXISTS "Providers can delete their own services" ON services;
+DROP POLICY IF EXISTS "Anyone can view provider profiles" ON provider_profiles;
+DROP POLICY IF EXISTS "Providers can update their own profile" ON provider_profiles;
+DROP POLICY IF EXISTS "Users can view their own cart" ON carts;
+DROP POLICY IF EXISTS "Users can insert their own cart" ON carts;
+DROP POLICY IF EXISTS "Users can view their own cart items" ON cart_items;
+DROP POLICY IF EXISTS "Users can insert their own cart items" ON cart_items;
+DROP POLICY IF EXISTS "Users can update their own cart items" ON cart_items;
+DROP POLICY IF EXISTS "Users can delete their own cart items" ON cart_items;
+DROP POLICY IF EXISTS "Users can view their own requests" ON service_requests;
+DROP POLICY IF EXISTS "Providers can view requests for their services" ON service_requests;
+DROP POLICY IF EXISTS "Providers can view unclaimed requests" ON service_requests;
+DROP POLICY IF EXISTS "Users can create requests" ON service_requests;
+DROP POLICY IF EXISTS "Providers can claim requests" ON service_requests;
+DROP POLICY IF EXISTS "Providers can update claimed requests" ON service_requests;
+DROP POLICY IF EXISTS "Users can view their own notifications" ON notifications;
+DROP POLICY IF EXISTS "Users can update their own notifications" ON notifications;
 
 -- RLS Policies for users
 CREATE POLICY "Users can view their own profile" ON users
@@ -211,6 +309,14 @@ BEGIN
   RETURN NEW;
 END;
 $$ language 'plpgsql';
+
+-- Drop existing triggers if they exist
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+DROP TRIGGER IF EXISTS update_services_updated_at ON services;
+DROP TRIGGER IF EXISTS update_provider_profiles_updated_at ON provider_profiles;
+DROP TRIGGER IF EXISTS update_carts_updated_at ON carts;
+DROP TRIGGER IF EXISTS update_cart_items_updated_at ON cart_items;
+DROP TRIGGER IF EXISTS update_service_requests_updated_at ON service_requests;
 
 -- Create triggers for updated_at
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users

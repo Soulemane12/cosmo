@@ -78,31 +78,38 @@ export type Notification = {
 };
 
 import { supabase } from '../lib/supabase';
-import { hashPassword, verifyPassword } from '../lib/auth';
+import { signUpUser, signInUser, signOutUser, getCurrentUser } from '../lib/auth';
 
 // Auth functions
 export const loginUser = async (email: string, password: string): Promise<AuthUser | null> => {
   try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single();
-
-    if (error || !user) {
+    const result = await signInUser(email, password);
+    
+    if (!result.success || !result.data) {
       return null;
     }
 
-    const isValidPassword = await verifyPassword(password, user.password_hash);
-    if (!isValidPassword) {
+    const user = result.data.user;
+    if (!user) {
+      return null;
+    }
+
+    // Get user details from the users table
+    const { data: userDetails, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (error || !userDetails) {
       return null;
     }
 
     return {
       id: user.id,
-      name: user.name,
-      email: user.email,
-      type: user.user_type
+      name: userDetails.name,
+      email: user.email || '',
+      type: userDetails.user_type
     };
   } catch (error) {
     console.error('Login error:', error);
@@ -112,14 +119,30 @@ export const loginUser = async (email: string, password: string): Promise<AuthUs
 
 export const registerUser = async (userData: Omit<User, 'id'>): Promise<User | null> => {
   try {
-    const hashedPassword = await hashPassword(userData.email); // Using email as password for demo
+    // First, sign up with Supabase auth
+    const result = await signUpUser(userData.email, userData.email, {
+      name: userData.name,
+      location: userData.location,
+      user_type: 'user'
+    });
 
-    const { data: user, error } = await supabase
+    if (!result.success || !result.data) {
+      console.error('Registration error:', result.error);
+      return null;
+    }
+
+    const user = result.data.user;
+    if (!user) {
+      return null;
+    }
+
+    // Create user record in the users table
+    const { data: newUser, error } = await supabase
       .from('users')
       .insert({
+        id: user.id,
         name: userData.name,
         email: userData.email,
-        password_hash: hashedPassword,
         location: userData.location,
         user_type: 'user'
       })
@@ -127,19 +150,19 @@ export const registerUser = async (userData: Omit<User, 'id'>): Promise<User | n
       .single();
 
     if (error) {
-      console.error('Registration error:', error);
+      console.error('User creation error:', error);
       return null;
     }
 
     // Create a cart for the new user
-    await createCartForUser(user.id);
+    await createCartForUser(newUser.id);
 
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      location: user.location,
-      user_type: user.user_type
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      location: newUser.location,
+      user_type: newUser.user_type
     };
   } catch (error) {
     console.error('Registration error:', error);
@@ -149,14 +172,30 @@ export const registerUser = async (userData: Omit<User, 'id'>): Promise<User | n
 
 export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rating' | 'services'>): Promise<Provider | null> => {
   try {
-    const hashedPassword = await hashPassword(providerData.email); // Using email as password for demo
+    // First, sign up with Supabase auth
+    const result = await signUpUser(providerData.email, providerData.email, {
+      name: providerData.name,
+      location: providerData.location,
+      user_type: 'provider'
+    });
 
-    const { data: user, error: userError } = await supabase
+    if (!result.success || !result.data) {
+      console.error('Provider registration error:', result.error);
+      return null;
+    }
+
+    const user = result.data.user;
+    if (!user) {
+      return null;
+    }
+
+    // Create user record in the users table
+    const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
+        id: user.id,
         name: providerData.name,
         email: providerData.email,
-        password_hash: hashedPassword,
         location: providerData.location,
         user_type: 'provider'
       })
@@ -164,7 +203,7 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
       .single();
 
     if (userError) {
-      console.error('Provider registration error:', userError);
+      console.error('Provider user creation error:', userError);
       return null;
     }
 
@@ -172,7 +211,7 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
     const { error: profileError } = await supabase
       .from('provider_profiles')
       .insert({
-        user_id: user.id,
+        user_id: newUser.id,
         specialty: providerData.specialty,
         rating: 0
       });
@@ -183,13 +222,13 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
     }
 
     return {
-      id: user.id,
-      name: user.name,
+      id: newUser.id,
+      name: newUser.name,
       specialty: providerData.specialty,
       rating: 0,
-      location: user.location,
+      location: newUser.location,
       services: [],
-      email: user.email,
+      email: newUser.email,
       user_type: 'provider'
     };
   } catch (error) {
