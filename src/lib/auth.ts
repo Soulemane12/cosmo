@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-// Use Supabase's built-in authentication instead of custom password hashing
+// Use Supabase's built-in authentication with proper password handling
 export const signUpUser = async (email: string, password: string, userData: {
   name: string;
   location: string;

@@ -1,146 +1,323 @@
 # Supabase Setup Guide
 
-This guide will help you set up Supabase for your cosmetic services marketplace application.
+## Database Schema
 
-## 1. Create a Supabase Project
-
-1. Go to [supabase.com](https://supabase.com) and sign up/login
-2. Click "New Project"
-3. Choose your organization
-4. Enter project details:
-   - Name: `cosmologo` (or your preferred name)
-   - Database Password: Choose a strong password
-   - Region: Choose the closest region to your users
-5. Click "Create new project"
-
-## 2. Get Your API Keys
-
-1. In your Supabase dashboard, go to Settings → API
-2. Copy the following values:
-   - **Project URL** (starts with `https://`)
-   - **anon public** key (starts with `eyJ`)
-   - **service_role** key (starts with `eyJ`)
-
-## 3. Set Up Environment Variables
-
-1. Create a `.env.local` file in your project root
-2. Add the following variables:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_project_url_here
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+### 1. Create the user_type enum
+```sql
+CREATE TYPE public.user_type AS ENUM ('user', 'provider');
 ```
 
-Replace the placeholder values with your actual Supabase credentials.
+### 2. Create the users table (updated for Supabase auth)
+```sql
+CREATE TABLE public.users (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying(255) NOT NULL,
+  email character varying(255) NOT NULL,
+  location character varying(255) NOT NULL,
+  user_type public.user_type NOT NULL DEFAULT 'user'::user_type,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_email_key UNIQUE (email)
+) TABLESPACE pg_default;
 
-## 4. Create Database Tables
+-- Create index on email
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users USING btree (email) TABLESPACE pg_default;
 
-1. In your Supabase dashboard, go to the SQL Editor
-2. Copy and paste the entire SQL script from the `database_schema.sql` file (or the SQL provided in the conversation)
-3. Click "Run" to execute the script
+-- Create trigger for updated_at
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
 
-This will create all the necessary tables:
-- `users` - Stores both regular users and providers
-- `services` - Stores service offerings
-- `provider_profiles` - Additional provider information
-- `carts` - Shopping carts for users
-- `cart_items` - Items in shopping carts
-- `service_requests` - Service requests from users to providers
+### 3. Create the update_updated_at_column function
+```sql
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+```
 
-## 5. Set Up Row Level Security (RLS)
+### 4. Create provider_profiles table
+```sql
+CREATE TABLE public.provider_profiles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  specialty character varying(255) NOT NULL,
+  rating numeric(3,2) DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT provider_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT provider_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) TABLESPACE pg_default;
 
-The SQL script includes RLS policies that:
-- Allow users to view their own data
-- Allow providers to view requests for their services
-- Allow public viewing of services and provider profiles
-- Restrict data access based on user authentication
+-- Create trigger for updated_at
+CREATE TRIGGER update_provider_profiles_updated_at BEFORE UPDATE ON provider_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
 
-## 6. Test the Integration
+### 5. Create services table
+```sql
+CREATE TABLE public.services (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying(255) NOT NULL,
+  description text,
+  price numeric(10,2) NOT NULL,
+  category character varying(255) NOT NULL,
+  image_url text,
+  provider_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT services_pkey PRIMARY KEY (id),
+  CONSTRAINT services_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES users(id) ON DELETE CASCADE
+) TABLESPACE pg_default;
 
-1. Start your development server: `npm run dev`
-2. Navigate to your application
-3. Try to register a new user or provider
-4. Test the login functionality
-5. Verify that data is being stored in Supabase
+-- Create trigger for updated_at
+CREATE TRIGGER update_services_updated_at BEFORE UPDATE ON services FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
 
-## 7. Database Schema Overview
+### 6. Create carts table
+```sql
+CREATE TABLE public.carts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT carts_pkey PRIMARY KEY (id),
+  CONSTRAINT carts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) TABLESPACE pg_default;
 
-### Users Table
-- Stores both regular users and service providers
-- Uses `user_type` field to distinguish between 'user' and 'provider'
-- Includes authentication information
+-- Create trigger for updated_at
+CREATE TRIGGER update_carts_updated_at BEFORE UPDATE ON carts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
 
-### Services Table
-- Stores all service offerings
-- Linked to providers via `provider_id`
-- Includes pricing and category information
+### 7. Create cart_items table
+```sql
+CREATE TABLE public.cart_items (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  cart_id uuid NOT NULL,
+  service_id uuid NOT NULL,
+  provider_id uuid NOT NULL,
+  quantity integer NOT NULL DEFAULT 1,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT cart_items_pkey PRIMARY KEY (id),
+  CONSTRAINT cart_items_cart_id_fkey FOREIGN KEY (cart_id) REFERENCES carts(id) ON DELETE CASCADE,
+  CONSTRAINT cart_items_service_id_fkey FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+  CONSTRAINT cart_items_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES users(id) ON DELETE CASCADE
+) TABLESPACE pg_default;
 
-### Provider Profiles Table
-- Additional information for service providers
-- Includes specialty and rating information
+-- Create trigger for updated_at
+CREATE TRIGGER update_cart_items_updated_at BEFORE UPDATE ON cart_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
 
-### Carts & Cart Items
-- Shopping cart functionality for users
-- Allows users to add services before making requests
+### 8. Create service_requests table
+```sql
+CREATE TABLE public.service_requests (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  provider_id uuid,
+  service_id uuid NOT NULL,
+  status character varying(50) NOT NULL DEFAULT 'pending',
+  request_date timestamp with time zone DEFAULT now(),
+  scheduled_date timestamp with time zone,
+  notes text,
+  claimed_at timestamp with time zone,
+  claimed_by uuid,
+  expires_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT service_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT service_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT service_requests_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT service_requests_service_id_fkey FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+  CONSTRAINT service_requests_claimed_by_fkey FOREIGN KEY (claimed_by) REFERENCES users(id) ON DELETE SET NULL
+) TABLESPACE pg_default;
 
-### Service Requests Table
-- Tracks service requests from users to providers
-- Includes status tracking (pending, accepted, declined, completed)
-- Supports scheduling and notes
+-- Create trigger for updated_at
+CREATE TRIGGER update_service_requests_updated_at BEFORE UPDATE ON service_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+```
 
-## 8. Authentication Flow
+### 9. Create notifications table
+```sql
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  type character varying(50) NOT NULL,
+  title character varying(255) NOT NULL,
+  message text NOT NULL,
+  related_request_id uuid,
+  is_read boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT notifications_related_request_id_fkey FOREIGN KEY (related_request_id) REFERENCES service_requests(id) ON DELETE CASCADE
+) TABLESPACE pg_default;
+```
 
-The application uses Supabase authentication with:
-- Email/password registration for both users and providers
-- Session management
-- Row Level Security for data protection
+## Row Level Security (RLS) Policies
 
-## 9. Troubleshooting
+### Enable RLS on all tables
+```sql
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE carts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+```
 
-### Common Issues:
+### Users table policies
+```sql
+-- Allow users to read their own profile
+CREATE POLICY "Users can view own profile" ON users
+  FOR SELECT USING (auth.uid() = id);
 
-1. **Environment variables not loading**
-   - Make sure your `.env.local` file is in the project root
-   - Restart your development server after adding environment variables
+-- Allow users to update their own profile
+CREATE POLICY "Users can update own profile" ON users
+  FOR UPDATE USING (auth.uid() = id);
 
-2. **Database connection errors**
-   - Verify your Supabase URL and API keys are correct
-   - Check that your database is online in the Supabase dashboard
+-- Allow authenticated users to insert their own profile
+CREATE POLICY "Users can insert own profile" ON users
+  FOR INSERT WITH CHECK (auth.uid() = id);
+```
 
-3. **RLS policy errors**
-   - Ensure you're logged in when accessing protected data
-   - Check that the user has the correct permissions
+### Provider profiles policies
+```sql
+-- Allow users to read all provider profiles
+CREATE POLICY "Anyone can view provider profiles" ON provider_profiles
+  FOR SELECT USING (true);
 
-4. **Type errors**
-   - The TypeScript types are defined in `src/lib/supabase.ts`
-   - Make sure all database operations match the expected types
+-- Allow providers to update their own profile
+CREATE POLICY "Providers can update own profile" ON provider_profiles
+  FOR UPDATE USING (auth.uid() = user_id);
 
-## 10. Production Deployment
+-- Allow providers to insert their own profile
+CREATE POLICY "Providers can insert own profile" ON provider_profiles
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+```
 
-When deploying to production:
+### Services policies
+```sql
+-- Allow anyone to read services
+CREATE POLICY "Anyone can view services" ON services
+  FOR SELECT USING (true);
 
-1. Update your environment variables with production Supabase credentials
-2. Ensure your Supabase project is in the correct region for your users
-3. Set up proper CORS settings in your Supabase dashboard
-4. Consider setting up database backups
-5. Monitor your application logs for any issues
+-- Allow providers to manage their own services
+CREATE POLICY "Providers can manage own services" ON services
+  FOR ALL USING (auth.uid() = provider_id);
+```
 
-## 11. Security Considerations
+### Carts policies
+```sql
+-- Allow users to manage their own cart
+CREATE POLICY "Users can manage own cart" ON carts
+  FOR ALL USING (auth.uid() = user_id);
+```
 
-- Never expose your `service_role` key in client-side code
-- Use RLS policies to protect sensitive data
-- Regularly rotate your API keys
-- Monitor your Supabase usage and set up alerts
+### Cart items policies
+```sql
+-- Allow users to manage their own cart items
+CREATE POLICY "Users can manage own cart items" ON cart_items
+  FOR ALL USING (auth.uid() IN (
+    SELECT user_id FROM carts WHERE id = cart_id
+  ));
+```
 
-## 12. Next Steps
+### Service requests policies
+```sql
+-- Allow users to view their own requests
+CREATE POLICY "Users can view own requests" ON service_requests
+  FOR SELECT USING (auth.uid() = user_id);
 
-After setting up Supabase:
+-- Allow users to create requests
+CREATE POLICY "Users can create requests" ON service_requests
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-1. Add more features like real-time notifications
-2. Implement file uploads for service images
-3. Add payment processing integration
-4. Set up email notifications
-5. Add analytics and monitoring
+-- Allow providers to view requests they're involved with
+CREATE POLICY "Providers can view related requests" ON service_requests
+  FOR SELECT USING (auth.uid() = provider_id OR auth.uid() = claimed_by);
 
-For more information, check the [Supabase documentation](https://supabase.com/docs). 
+-- Allow providers to update requests they're involved with
+CREATE POLICY "Providers can update related requests" ON service_requests
+  FOR UPDATE USING (auth.uid() = provider_id OR auth.uid() = claimed_by);
+```
+
+### Notifications policies
+```sql
+-- Allow users to view their own notifications
+CREATE POLICY "Users can view own notifications" ON notifications
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- Allow users to update their own notifications
+CREATE POLICY "Users can update own notifications" ON notifications
+  FOR UPDATE USING (auth.uid() = user_id);
+```
+
+## Environment Variables
+
+Create a `.env.local` file in your project root:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+## Supabase Functions
+
+### Claim service request function
+```sql
+CREATE OR REPLACE FUNCTION claim_service_request(request_id uuid, claiming_provider_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  UPDATE service_requests 
+  SET 
+    status = 'claimed',
+    provider_id = claiming_provider_id,
+    claimed_by = claiming_provider_id,
+    claimed_at = now()
+  WHERE id = request_id 
+    AND status = 'pending'
+    AND provider_id IS NULL;
+  
+  RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Accept claimed request function
+```sql
+CREATE OR REPLACE FUNCTION accept_claimed_request(request_id uuid, provider_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  UPDATE service_requests 
+  SET status = 'accepted'
+  WHERE id = request_id 
+    AND status = 'claimed'
+    AND claimed_by = provider_id;
+  
+  RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Decline claimed request function
+```sql
+CREATE OR REPLACE FUNCTION decline_claimed_request(request_id uuid, provider_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  UPDATE service_requests 
+  SET 
+    status = 'pending',
+    provider_id = NULL,
+    claimed_by = NULL,
+    claimed_at = NULL
+  WHERE id = request_id 
+    AND status = 'claimed'
+    AND claimed_by = provider_id;
+  
+  RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql;
+``` 

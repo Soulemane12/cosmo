@@ -117,10 +117,10 @@ export const loginUser = async (email: string, password: string): Promise<AuthUs
   }
 };
 
-export const registerUser = async (userData: Omit<User, 'id'>): Promise<User | null> => {
+export const registerUser = async (userData: Omit<User, 'id'> & { password: string }): Promise<User | null> => {
   try {
-    // First, sign up with Supabase auth
-    const result = await signUpUser(userData.email, userData.email, {
+    // First, sign up with Supabase auth using the actual password
+    const result = await signUpUser(userData.email, userData.password, {
       name: userData.name,
       location: userData.location,
       user_type: 'user'
@@ -143,6 +143,7 @@ export const registerUser = async (userData: Omit<User, 'id'>): Promise<User | n
         id: user.id,
         name: userData.name,
         email: userData.email,
+        password_hash: '', // Supabase handles password hashing
         location: userData.location,
         user_type: 'user'
       })
@@ -170,10 +171,10 @@ export const registerUser = async (userData: Omit<User, 'id'>): Promise<User | n
   }
 };
 
-export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rating' | 'services'>): Promise<Provider | null> => {
+export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rating' | 'services'> & { password: string }): Promise<Provider | null> => {
   try {
-    // First, sign up with Supabase auth
-    const result = await signUpUser(providerData.email, providerData.email, {
+    // First, sign up with Supabase auth using the actual password
+    const result = await signUpUser(providerData.email, providerData.password, {
       name: providerData.name,
       location: providerData.location,
       user_type: 'provider'
@@ -196,6 +197,7 @@ export const registerProvider = async (providerData: Omit<Provider, 'id' | 'rati
         id: user.id,
         name: providerData.name,
         email: providerData.email,
+        password_hash: '', // Supabase handles password hashing
         location: providerData.location,
         user_type: 'provider'
       })

@@ -54,16 +54,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (email: string, password: string): Promise<AuthUser | null> => {
     setIsLoading(true);
     try {
-      const user = await loginUser(email, password);
-      if (user) {
-        setCurrentUser(user);
-        // Store user session in Supabase auth
-        await supabase.auth.signInWithPassword({
-          email,
-          password: email // Using email as password for demo
-        });
+      const result = await signInUser(email, password);
+      
+      if (!result.success || !result.data) {
+        return null;
       }
-      return user;
+
+      const user = result.data.user;
+      if (!user) {
+        return null;
+      }
+
+      // Get user details from our users table
+      const { data: userDetails, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error || !userDetails) {
+        return null;
+      }
+
+      const authUser = {
+        id: user.id,
+        name: userDetails.name,
+        email: user.email || '',
+        type: userDetails.user_type
+      };
+
+      setCurrentUser(authUser);
+      return authUser;
     } catch (error) {
       console.error('Login error:', error);
       return null;
@@ -89,19 +110,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   ): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const user = await registerUser({ name, email, location, user_type: 'user' });
+      const user = await registerUser({ name, email, location, user_type: 'user', password });
       if (user) {
         // Sign in the user after registration
-        await supabase.auth.signInWithPassword({
-          email,
-          password: email // Using email as password for demo
-        });
-        setCurrentUser({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          type: user.user_type
-        });
+        const loginResult = await signInUser(email, password);
+        if (loginResult.success && loginResult.data) {
+          setCurrentUser({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            type: user.user_type
+          });
+        }
         return true;
       }
       return false;
@@ -127,20 +147,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         email, 
         location, 
         specialty,
-        user_type: 'provider'
+        user_type: 'provider',
+        password
       });
       if (provider) {
         // Sign in the provider after registration
-        await supabase.auth.signInWithPassword({
-          email,
-          password: email // Using email as password for demo
-        });
-        setCurrentUser({
-          id: provider.id,
-          name: provider.name,
-          email: provider.email,
-          type: provider.user_type
-        });
+        const loginResult = await signInUser(email, password);
+        if (loginResult.success && loginResult.data) {
+          setCurrentUser({
+            id: provider.id,
+            name: provider.name,
+            email: provider.email,
+            type: provider.user_type
+          });
+        }
         return true;
       }
       return false;
