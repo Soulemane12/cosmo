@@ -534,6 +534,26 @@ export default function ServiceProviderDashboard() {
                 </div>
               )}
 
+              {/* Incoming Requests assigned to you (pending) */}
+              <div className="mt-10">
+                <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Incoming Requests (assigned to you)</h3>
+                {pendingRequests.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400">No incoming requests right now.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {pendingRequests.map((request) => (
+                      <RequestCard
+                        key={request.id}
+                        request={request}
+                        isProvider={true}
+                        onAccept={handleAcceptRequest}
+                        onDecline={handleDeclineRequest}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* My claimed (inline) */}
               <div className="mt-10">
                 <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">My Claimed (pending response)</h3>
