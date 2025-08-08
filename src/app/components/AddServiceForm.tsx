@@ -23,8 +23,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     "Injectables",
     "Skin Treatments",
     "Hair Restoration",
-    "Body Contouring",
-    "Other"
+    "Body Contouring"
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,12 +31,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     setError('');
     
     // Validation
-    if (!name || !description || !price || !category) {
-      setError('Please fill in all fields');
-      return;
-    }
-    if (category && !selectedOption) {
-      setError('Please select a service/procedure from the list');
+    if (!selectedOption || !description || !price) {
+      setError('Please select a service/procedure and fill in description and price');
       return;
     }
     
@@ -48,7 +43,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     }
     
     try {
-      const finalName = selectedOption && selectedOption !== 'Other (custom)' ? selectedOption : name;
+      const finalName = selectedOption;
 
       const newService = await createNewService({
         name: finalName,
@@ -145,8 +140,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'Sculptra (Poly-L-Lactic Acid)',
       'Radiesse (Calcium Hydroxylapatite)',
       'Kybella (Deoxycholic Acid)',
-      'PRF/PRP Undereye',
-      'Other (custom)'
+      'PRF/PRP Undereye'
     ],
     []
   );
@@ -162,8 +156,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'HydraFacial',
       'Dermaplaning',
       'RF Skin Tightening',
-      'LED Light Therapy',
-      'Other (custom)'
+      'LED Light Therapy'
     ],
     []
   );
@@ -176,8 +169,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'Fractional CO2 Laser Resurfacing',
       'Erbium Laser Resurfacing',
       'Photodynamic Therapy (PDT)',
-      'Scar Treatment Package',
-      'Other (custom)'
+      'Scar Treatment Package'
     ],
     []
   );
@@ -187,8 +179,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'PRP/PRF Scalp',
       'Low-Level Laser Therapy (LLLT)',
       'Medical Therapy Program',
-      'FUE Hair Transplant Evaluation',
-      'Other (custom)'
+      'FUE Hair Transplant Evaluation'
     ],
     []
   );
@@ -200,8 +191,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'truSculpt',
       'SculpSure',
       'Evolve Trim/Tite/Tone',
-      'Radiofrequency Body Tightening',
-      'Other (custom)'
+      'Radiofrequency Body Tightening'
     ],
     []
   );
@@ -213,8 +203,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'Non-surgical': nonSurgicalOptions,
       'Skin Treatments': skinTreatmentOptions,
       'Hair Restoration': hairRestorationOptions,
-      'Body Contouring': bodyContouringOptions,
-      'Other': ['Other (custom)']
+      'Body Contouring': bodyContouringOptions
     }),
     [
       surgicalProcedures,
@@ -228,8 +217,13 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
 
   const handleOptionChange = (value: string) => {
     setSelectedOption(value);
-    if (value && value !== 'Other (custom)') {
+    if (value) {
       setName(value);
+      // derive category from selection group
+      const derivedCategory = Object.keys(serviceOptionsByCategory).find((cat) =>
+        (serviceOptionsByCategory[cat] || []).includes(value)
+      );
+      if (derivedCategory) setCategory(derivedCategory);
     }
   };
 
@@ -244,20 +238,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       )}
       
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">
-            Service Name
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
-            placeholder="e.g., Botox, Rhinoplasty"
-            required
-          />
-        </div>
+        {/* Name is auto-derived from the selected option; no manual input shown */}
         
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">
@@ -295,55 +276,35 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
             </div>
           </div>
           
-          <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-300 mb-1">
-              Category
-            </label>
-            <select
-              id="category"
-              value={category}
-              onChange={(e) => {
-                const value = e.target.value;
-                setCategory(value);
-                setSelectedOption('');
-              }}
-              className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
-              required
-            >
-              <option value="">Select a category</option>
-              {categoryOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Category is auto-derived from the selected option; no manual input shown */}
         </div>
 
-        {category && (
-          <div>
-            <label htmlFor="serviceOption" className="block text-sm font-medium text-gray-300 mb-1">
-              Service / Procedure
-            </label>
-            <select
-              id="serviceOption"
-              value={selectedOption}
-              onChange={(e) => handleOptionChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
-              required
-            >
-              <option value="">Select an option</option>
-              {(serviceOptionsByCategory[category] || []).map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-gray-400">
-              Selecting an option will auto-fill the name. Choose "Other (custom)" to type your own.
-            </p>
-          </div>
-        )}
+        <div>
+          <label htmlFor="serviceOption" className="block text-sm font-medium text-gray-300 mb-1">
+            Service / Procedure
+          </label>
+          <select
+            id="serviceOption"
+            value={selectedOption}
+            onChange={(e) => handleOptionChange(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
+            required
+          >
+            <option value="">Select a service/procedure</option>
+            {categoryOptions.map((cat) => (
+              <optgroup key={cat} label={cat}>
+                {(serviceOptionsByCategory[cat] || []).map((opt) => (
+                  <option key={`${cat}::${opt}`} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-400">
+            Selected: {selectedOption || 'None'} {selectedOption ? `• Category: ${category}` : ''}
+          </p>
+        </div>
         
         <div className="flex justify-end space-x-2 pt-4">
           <button
