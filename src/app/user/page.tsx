@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Service, 
   Provider, 
@@ -36,6 +36,8 @@ export default function UserDashboard() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [isGenericRequestModalOpen, setIsGenericRequestModalOpen] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [cartToast, setCartToast] = useState<{ visible: boolean; service?: Service }>({ visible: false });
+  const cartToastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Check if user is authenticated and is a client
@@ -88,11 +90,31 @@ export default function UserDashboard() {
       const updatedCart = await getCartByUserId(currentUser.id);
       setCart(updatedCart || { items: [] });
       
-      // Show confirmation
-      alert(`${service.name} added to cart!`);
+      // Show toast confirmation
+      setCartToast({ visible: true, service });
+      if (cartToastTimerRef.current) clearTimeout(cartToastTimerRef.current);
+      cartToastTimerRef.current = setTimeout(() => {
+        setCartToast({ visible: false });
+      }, 3500);
     } catch (error) {
       console.error('Error adding to cart:', error);
-      alert('Failed to add item to cart. Please try again.');
+      setCartToast({ visible: true });
+      if (cartToastTimerRef.current) clearTimeout(cartToastTimerRef.current);
+      cartToastTimerRef.current = setTimeout(() => setCartToast({ visible: false }), 3500);
+    }
+  };
+
+  const handleAddOneMore = async () => {
+    if (!currentUser || !cartToast.service) return;
+    try {
+      await addToCart(currentUser.id, cartToast.service.id, cartToast.service.provider_id);
+      const updatedCart = await getCartByUserId(currentUser.id);
+      setCart(updatedCart || { items: [] });
+      // keep toast visible a bit longer
+      if (cartToastTimerRef.current) clearTimeout(cartToastTimerRef.current);
+      cartToastTimerRef.current = setTimeout(() => setCartToast({ visible: false }), 3000);
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -247,14 +269,14 @@ export default function UserDashboard() {
                   {allServices.map((service) => {
                     const provider = providers.find(p => p.id === service.provider_id);
                     return (
-                      <ServiceCard
-                        key={service.id}
-                        service={service}
+                    <ServiceCard
+                      key={service.id}
+                      service={service}
                         onAddToCart={() => handleAddToCart(service)}
-                        showAddToCart={true}
+                      showAddToCart={true}
                         showAction={false}
                         providerName={provider?.name}
-                      />
+                    />
                     );
                   })}
                 </div>
@@ -305,6 +327,48 @@ export default function UserDashboard() {
       {/* Request Service Modal removed: clients must checkout from cart */}
 
       {/* Generic Service Request Modal removed to enforce provider-specific services only */}
+
+      {/* Add-to-cart toast */}
+      {cartToast.visible && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700">
+          <div className="p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 mr-3">
+                <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="font-medium">{cartToast.service ? `${cartToast.service.name} added to cart` : 'Updated cart'}</p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => setActiveTab('cart')}
+                    className="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                  >
+                    Go to cart
+                  </button>
+                  {cartToast.service && (
+                    <button
+                      onClick={handleAddOneMore}
+                      className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md"
+                    >
+                      Add one more
+                    </button>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setCartToast({ visible: false })}
+                className="ml-3 text-gray-400 hover:text-gray-200"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Checkout Confirmation Modal */}
       <Modal
