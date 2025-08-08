@@ -412,7 +412,46 @@ export default function ServiceProviderDashboard() {
                       See your accepted jobs
                     </p>
                   </button>
+                  <button
+                    onClick={() => setIsAddServiceModalOpen(true)}
+                    className="p-4 border border-blue-200 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                  >
+                    <h4 className="font-medium text-blue-900 dark:text-blue-100">Add Service</h4>
+                    <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
+                      Publish a service you offer
+                    </p>
+                  </button>
                 </div>
+              </div>
+
+              {/* Your Services (inline preview) */}
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Your Services</h3>
+                  <button
+                    onClick={() => setIsAddServiceModalOpen(true)}
+                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Service
+                  </button>
+                </div>
+                {providerDetails.services.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400">No services listed yet.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {providerDetails.services.slice(0, 6).map((service) => (
+                      <ServiceCard
+                        key={service.id}
+                        service={service}
+                        isProviderView={true}
+                        showAction={false}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
