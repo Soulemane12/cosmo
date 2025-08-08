@@ -16,7 +16,7 @@ import {
 import { useAuth } from '@/data/AuthContext';
 import { useRouter } from 'next/navigation';
 import AppHeader from '../components/AppHeader';
-import ProviderCard from '../components/ProviderCard';
+// Provider browsing removed; clients browse services only
 import ServiceCard from '../components/ServiceCard';
 import Modal from '../components/Modal';
 import RequestCard from '../components/RequestCard';
@@ -25,10 +25,10 @@ import CartDisplay from '../components/CartDisplay';
 export default function UserDashboard() {
   const { currentUser, isLoading } = useAuth();
   const router = useRouter();
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  // Provider selection removed
   // Request flow removed: clients must add to cart and checkout
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'providers' | 'services' | 'requests' | 'cart'>('providers');
+  const [activeTab, setActiveTab] = useState<'services' | 'requests' | 'cart'>('services');
   const [requests, setRequests] = useState<Array<any>>([]);
   const [userDetails, setUserDetails] = useState<any>(null);
   const [cart, setCart] = useState<any>({ items: [] });
@@ -75,20 +75,16 @@ export default function UserDashboard() {
 
   // Direct request flow removed
 
-  // Handle viewing provider services
-  const handleViewProviderServices = (provider: Provider) => {
-    setSelectedProvider(provider);
-    setActiveTab('services');
-  };
+  // Viewing provider services removed
 
   // Selecting service opens request flow removed
 
   // Handle adding a service to cart
-  const handleAddToCart = async (service: Service, provider: Provider) => {
+  const handleAddToCart = async (service: Service) => {
     if (!currentUser) return;
     
     try {
-      await addToCart(currentUser.id, service.id, provider.id);
+      await addToCart(currentUser.id, service.id, service.provider_id);
       const updatedCart = await getCartByUserId(currentUser.id);
       setCart(updatedCart || { items: [] });
       
@@ -203,28 +199,15 @@ export default function UserDashboard() {
           <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
             <nav className="flex flex-wrap -mb-px">
               <button
-                onClick={() => setActiveTab('providers')}
+                onClick={() => setActiveTab('services')}
                 className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'providers'
+                  activeTab === 'services'
                     ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
-                Providers
+                Services
               </button>
-              {/* Marketplace removed to ensure clients can only request services added by providers */}
-              {selectedProvider && (
-                <button
-                  onClick={() => setActiveTab('services')}
-                  className={`py-4 px-6 text-sm font-medium ${
-                    activeTab === 'services'
-                      ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                  }`}
-                >
-                  Services
-                </button>
-              )}
               <button
                 onClick={() => setActiveTab('requests')}
                 className={`py-4 px-6 text-sm font-medium ${
@@ -254,67 +237,26 @@ export default function UserDashboard() {
           </div>
 
           {/* Tab content */}
-          {activeTab === 'providers' && (
+          {activeTab === 'services' && (
             <div>
-              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-                Service Providers
-              </h2>
-              {providers.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400">
-                  No providers available at the moment.
-                </p>
+              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Services</h2>
+              {allServices.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400">No services available at the moment.</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {providers.map((provider) => (
-                    <ProviderCard
-                      key={provider.id}
-                      provider={provider}
-                      onSelect={() => handleViewProviderServices(provider)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Marketplace content removed */}
-
-          {activeTab === 'services' && selectedProvider && (
-            <div>
-              <div className="mb-4 flex items-center">
-                <button 
-                  onClick={() => {
-                    setActiveTab('providers');
-                    setSelectedProvider(null);
-                  }}
-                  className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 mr-2 flex items-center"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                  </svg>
-                  Back
-                </button>
-                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-                  Services by {selectedProvider.name}
-                </h2>
-              </div>
-
-              {selectedProvider.services.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400">
-                  No services available from this provider.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {selectedProvider.services.map((service) => (
-                    <ServiceCard
-                      key={service.id}
-                      service={service}
-                      onAddToCart={() => handleAddToCart(service, selectedProvider)}
-                      showAddToCart={true}
-                      showAction={false}
-                      providerName={selectedProvider.name}
-                    />
-                  ))}
+                  {allServices.map((service) => {
+                    const provider = providers.find(p => p.id === service.provider_id);
+                    return (
+                      <ServiceCard
+                        key={service.id}
+                        service={service}
+                        onAddToCart={() => handleAddToCart(service)}
+                        showAddToCart={true}
+                        showAction={false}
+                        providerName={provider?.name}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
