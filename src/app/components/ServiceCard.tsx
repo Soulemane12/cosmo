@@ -11,6 +11,7 @@ interface ServiceCardProps {
   showAction?: boolean;
   showAddToCart?: boolean;
   isProviderView?: boolean;
+  providerName?: string;
 }
 
 export default function ServiceCard({ 
@@ -20,7 +21,8 @@ export default function ServiceCard({
   actionLabel = "Request Service", 
   showAction = true,
   showAddToCart = false,
-  isProviderView = false
+  isProviderView = false,
+  providerName
 }: ServiceCardProps) {
   return (
     <div className={`border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow ${isProviderView ? 'bg-gray-800 border-green-800' : 'bg-gray-800 border-blue-800'}`}>
@@ -34,6 +36,9 @@ export default function ServiceCard({
           )}
         </div>
         <p className="text-sm text-gray-300 mb-2">{service.description}</p>
+        {providerName && (
+          <p className="text-xs text-gray-400 mb-2">Offered by {providerName}</p>
+        )}
         <div className="flex justify-between items-center">
           <p className="font-medium text-gray-100">
             ${service.price.toLocaleString()}

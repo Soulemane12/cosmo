@@ -312,6 +312,7 @@ export default function UserDashboard() {
                       onAddToCart={() => handleAddToCart(service, selectedProvider)}
                       showAddToCart={true}
                       showAction={false}
+                      providerName={selectedProvider.name}
                     />
                   ))}
                 </div>
