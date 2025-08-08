@@ -19,7 +19,6 @@ import AppHeader from '../components/AppHeader';
 import ProviderCard from '../components/ProviderCard';
 import ServiceCard from '../components/ServiceCard';
 import Modal from '../components/Modal';
-import RequestForm from '../components/RequestForm';
 import RequestCard from '../components/RequestCard';
 import CartDisplay from '../components/CartDisplay';
 
@@ -27,8 +26,7 @@ export default function UserDashboard() {
   const { currentUser, isLoading } = useAuth();
   const router = useRouter();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Request flow removed: clients must add to cart and checkout
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'providers' | 'services' | 'requests' | 'cart'>('providers');
   const [requests, setRequests] = useState<Array<any>>([]);
@@ -75,36 +73,7 @@ export default function UserDashboard() {
     }
   }, [currentUser, isLoading, router]);
 
-  // Handle requesting a service
-  const handleRequestService = async (data: {
-    providerId: string;
-    serviceId: string;
-    userId: string;
-    notes: string;
-    scheduledDate: string;
-  }) => {
-    if (!currentUser) return;
-
-    try {
-      await createServiceRequest({
-        ...data,
-        status: 'pending',
-        requestDate: new Date().toISOString().split('T')[0],
-      });
-      
-      // Update local requests state
-      const updatedRequests = await getServiceRequestsByUserId(currentUser.id);
-      setRequests(updatedRequests);
-      
-      // Close modal
-      setIsModalOpen(false);
-      setSelectedService(null);
-      setSelectedProvider(null);
-    } catch (error) {
-      console.error('Error creating service request:', error);
-      alert('Failed to create service request. Please try again.');
-    }
-  };
+  // Direct request flow removed
 
   // Handle viewing provider services
   const handleViewProviderServices = (provider: Provider) => {
@@ -112,11 +81,7 @@ export default function UserDashboard() {
     setActiveTab('services');
   };
 
-  // Handle selecting a service to request
-  const handleSelectService = (service: Service) => {
-    setSelectedService(service);
-    setIsModalOpen(true);
-  };
+  // Selecting service opens request flow removed
 
   // Handle adding a service to cart
   const handleAddToCart = async (service: Service, provider: Provider) => {
@@ -189,43 +154,7 @@ export default function UserDashboard() {
     }
   };
 
-  // Handle requesting a service without specifying a provider
-  const handleGenericServiceRequest = (service: Service) => {
-    setSelectedService(service);
-    setIsGenericRequestModalOpen(true);
-  };
-  
-  // Submit a generic service request (to be matched with providers later)
-  const submitGenericRequest = async (data: {
-    serviceId: string;
-    userId: string;
-    notes: string;
-    scheduledDate: string;
-  }) => {
-    if (!currentUser) return;
-    
-    try {
-      // Create a service request without a specific provider
-      await createServiceRequest({
-        ...data,
-        providerId: 'pending', // Special value indicating no specific provider yet
-        status: 'pending',
-        requestDate: new Date().toISOString().split('T')[0],
-      });
-      
-      // Update local requests state
-      const updatedRequests = await getServiceRequestsByUserId(currentUser.id);
-      setRequests(updatedRequests);
-      
-      // Close modal and show confirmation
-      setIsGenericRequestModalOpen(false);
-      setSelectedService(null);
-      alert('Your service request has been submitted! Providers will be able to view and accept your request.');
-    } catch (error) {
-      console.error('Error submitting generic request:', error);
-      alert('Failed to submit request. Please try again.');
-    }
-  };
+  // Generic marketplace request flow removed
 
   if (isLoading || !currentUser || !userDetails || isLoadingData) {
     return (
@@ -380,9 +309,9 @@ export default function UserDashboard() {
                     <ServiceCard
                       key={service.id}
                       service={service}
-                      onSelect={() => handleSelectService(service)}
                       onAddToCart={() => handleAddToCart(service, selectedProvider)}
                       showAddToCart={true}
+                      showAction={false}
                     />
                   ))}
                 </div>
@@ -430,28 +359,7 @@ export default function UserDashboard() {
         </div>
       </main>
 
-      {/* Request Service Modal */}
-      {selectedService && selectedProvider && currentUser && (
-        <Modal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedService(null);
-          }}
-          title="Request Service"
-        >
-          <RequestForm
-            service={selectedService}
-            provider={selectedProvider}
-            userId={currentUser.id}
-            onSubmit={handleRequestService}
-            onCancel={() => {
-              setIsModalOpen(false);
-              setSelectedService(null);
-            }}
-          />
-        </Modal>
-      )}
+      {/* Request Service Modal removed: clients must checkout from cart */}
 
       {/* Generic Service Request Modal removed to enforce provider-specific services only */}
 
