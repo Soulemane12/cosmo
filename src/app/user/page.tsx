@@ -30,7 +30,7 @@ export default function UserDashboard() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'providers' | 'services' | 'requests' | 'cart' | 'marketplace'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'services' | 'requests' | 'cart'>('providers');
   const [requests, setRequests] = useState<Array<any>>([]);
   const [userDetails, setUserDetails] = useState<any>(null);
   const [cart, setCart] = useState<any>({ items: [] });
@@ -283,16 +283,7 @@ export default function UserDashboard() {
               >
                 Providers
               </button>
-              <button
-                onClick={() => setActiveTab('marketplace')}
-                className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'marketplace'
-                    ? 'border-b-2 border-purple-500 text-purple-600 dark:text-purple-400'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                Service Marketplace
-              </button>
+              {/* Marketplace removed to ensure clients can only request services added by providers */}
               {selectedProvider && (
                 <button
                   onClick={() => setActiveTab('services')}
@@ -357,34 +348,7 @@ export default function UserDashboard() {
             </div>
           )}
 
-          {activeTab === 'marketplace' && (
-            <div>
-              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-                Service Marketplace
-              </h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-6">
-                Browse all available services. Submit a request and qualified providers will respond.
-              </p>
-              
-              {allServices.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400">
-                  No services available at the moment.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {allServices.map((service) => (
-                    <ServiceCard
-                      key={service.id}
-                      service={service}
-                      onSelect={() => handleGenericServiceRequest(service)}
-                      actionLabel="Request This Service"
-                      showAddToCart={false}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Marketplace content removed */}
 
           {activeTab === 'services' && selectedProvider && (
             <div>
@@ -489,89 +453,7 @@ export default function UserDashboard() {
         </Modal>
       )}
 
-      {/* Generic Service Request Modal */}
-      {selectedService && (
-        <Modal
-          isOpen={isGenericRequestModalOpen}
-          onClose={() => {
-            setIsGenericRequestModalOpen(false);
-            setSelectedService(null);
-          }}
-          title="Request This Service"
-        >
-          <div className="p-4">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium mb-1">{selectedService.name}</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">${selectedService.price.toLocaleString()}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{selectedService.description}</p>
-            </div>
-            
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (!currentUser || !selectedService) return;
-              
-              const formData = new FormData(e.currentTarget);
-              const scheduledDate = formData.get('scheduledDate') as string;
-              const notes = formData.get('notes') as string;
-              
-              submitGenericRequest({
-                serviceId: selectedService.id,
-                userId: currentUser.id,
-                notes,
-                scheduledDate
-              });
-            }}>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="scheduledDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Preferred Date
-                  </label>
-                  <input
-                    type="date"
-                    id="scheduledDate"
-                    name="scheduledDate"
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Notes (Optional)
-                  </label>
-                  <textarea
-                    id="notes"
-                    name="notes"
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                    placeholder="Any specific requirements or questions?"
-                  ></textarea>
-                </div>
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsGenericRequestModalOpen(false);
-                      setSelectedService(null);
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-                  >
-                    Submit Request
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </Modal>
-      )}
+      {/* Generic Service Request Modal removed to enforce provider-specific services only */}
 
       {/* Checkout Confirmation Modal */}
       <Modal

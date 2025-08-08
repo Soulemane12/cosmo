@@ -558,6 +558,18 @@ export const getCartByUserId = async (userId: string): Promise<Cart | null> => {
 
 export const addToCart = async (userId: string, serviceId: string, providerId: string): Promise<CartItem | null> => {
   try {
+    // Enforce that the service belongs to the specified provider
+    const { data: svc, error: svcErr } = await supabase
+      .from('services')
+      .select('id, provider_id')
+      .eq('id', serviceId)
+      .single();
+
+    if (svcErr || !svc || svc.provider_id !== providerId) {
+      console.error('Add to cart validation failed: service does not belong to provider');
+      return null;
+    }
+
     const cart = await getCartByUserId(userId);
     if (!cart) return null;
 
@@ -844,6 +856,23 @@ export const getClaimedServiceRequests = async (providerId: string): Promise<Ser
 
 export const createServiceRequest = async (request: Omit<ServiceRequest, 'id'>): Promise<ServiceRequest | null> => {
   try {
+    // Validate provider-service ownership and disallow generic ('pending') provider requests
+    if (!request.providerId || request.providerId === 'pending') {
+      console.error('Create request validation failed: providerId is required and cannot be "pending"');
+      return null;
+    }
+
+    const { data: svc, error: svcErr } = await supabase
+      .from('services')
+      .select('id, provider_id')
+      .eq('id', request.serviceId)
+      .single();
+
+    if (svcErr || !svc || svc.provider_id !== request.providerId) {
+      console.error('Create request validation failed: service does not belong to provider');
+      return null;
+    }
+
     const { data: newRequest, error } = await supabase
       .from('service_requests')
       .insert({

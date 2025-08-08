@@ -14,7 +14,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
-  const [selectedProcedure, setSelectedProcedure] = useState('');
+  const [selectedOption, setSelectedOption] = useState('');
   const [error, setError] = useState('');
   
   const categoryOptions = [
@@ -36,8 +36,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       setError('Please fill in all fields');
       return;
     }
-    if (category === 'Surgical' && !selectedProcedure) {
-      setError('Please select a surgical procedure');
+    if (category && !selectedOption) {
+      setError('Please select a service/procedure from the list');
       return;
     }
     
@@ -48,8 +48,10 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     }
     
     try {
+      const finalName = selectedOption && selectedOption !== 'Other (custom)' ? selectedOption : name;
+
       const newService = await createNewService({
-        name,
+        name: finalName,
         description,
         price: priceValue,
         category,
@@ -132,8 +134,100 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     []
   );
 
-  const handleProcedureChange = (value: string) => {
-    setSelectedProcedure(value);
+  const injectableOptions = useMemo(
+    () => [
+      'Botox (OnabotulinumtoxinA)',
+      'Dysport (AbobotulinumtoxinA)',
+      'Xeomin (IncobotulinumtoxinA)',
+      'Daxxify (DaxibotulinumtoxinA)',
+      'Juvederm (Hyaluronic Acid Filler)',
+      'Restylane (Hyaluronic Acid Filler)',
+      'Sculptra (Poly-L-Lactic Acid)',
+      'Radiesse (Calcium Hydroxylapatite)',
+      'Kybella (Deoxycholic Acid)',
+      'PRF/PRP Undereye',
+      'Other (custom)'
+    ],
+    []
+  );
+
+  const nonSurgicalOptions = useMemo(
+    () => [
+      'Laser Hair Removal',
+      'Chemical Peel',
+      'Microdermabrasion',
+      'Microneedling',
+      'RF Microneedling',
+      'IPL Photofacial',
+      'HydraFacial',
+      'Dermaplaning',
+      'RF Skin Tightening',
+      'LED Light Therapy',
+      'Other (custom)'
+    ],
+    []
+  );
+
+  const skinTreatmentOptions = useMemo(
+    () => [
+      'Acne Treatment Program',
+      'Pigmentation Treatment Program',
+      'Rosacea Management',
+      'Fractional CO2 Laser Resurfacing',
+      'Erbium Laser Resurfacing',
+      'Photodynamic Therapy (PDT)',
+      'Scar Treatment Package',
+      'Other (custom)'
+    ],
+    []
+  );
+
+  const hairRestorationOptions = useMemo(
+    () => [
+      'PRP/PRF Scalp',
+      'Low-Level Laser Therapy (LLLT)',
+      'Medical Therapy Program',
+      'FUE Hair Transplant Evaluation',
+      'Other (custom)'
+    ],
+    []
+  );
+
+  const bodyContouringOptions = useMemo(
+    () => [
+      'CoolSculpting (Cryolipolysis)',
+      'Emsculpt (HIFEM)',
+      'truSculpt',
+      'SculpSure',
+      'Evolve Trim/Tite/Tone',
+      'Radiofrequency Body Tightening',
+      'Other (custom)'
+    ],
+    []
+  );
+
+  const serviceOptionsByCategory: Record<string, string[]> = useMemo(
+    () => ({
+      'Surgical': surgicalProcedures,
+      'Injectables': injectableOptions,
+      'Non-surgical': nonSurgicalOptions,
+      'Skin Treatments': skinTreatmentOptions,
+      'Hair Restoration': hairRestorationOptions,
+      'Body Contouring': bodyContouringOptions,
+      'Other': ['Other (custom)']
+    }),
+    [
+      surgicalProcedures,
+      injectableOptions,
+      nonSurgicalOptions,
+      skinTreatmentOptions,
+      hairRestorationOptions,
+      bodyContouringOptions
+    ]
+  );
+
+  const handleOptionChange = (value: string) => {
+    setSelectedOption(value);
     if (value && value !== 'Other (custom)') {
       setName(value);
     }
@@ -163,11 +257,6 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
             placeholder="e.g., Botox, Rhinoplasty"
             required
           />
-          {category === 'Surgical' && (
-            <p className="mt-1 text-xs text-gray-400">
-              Tip: Selecting a procedure below will auto-fill this name.
-            </p>
-          )}
         </div>
         
         <div>
@@ -216,9 +305,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
               onChange={(e) => {
                 const value = e.target.value;
                 setCategory(value);
-                if (value !== 'Surgical') {
-                  setSelectedProcedure('');
-                }
+                setSelectedOption('');
               }}
               className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
               required
@@ -233,25 +320,28 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
           </div>
         </div>
 
-        {category === 'Surgical' && (
+        {category && (
           <div>
-            <label htmlFor="procedure" className="block text-sm font-medium text-gray-300 mb-1">
-              Surgical Procedure
+            <label htmlFor="serviceOption" className="block text-sm font-medium text-gray-300 mb-1">
+              Service / Procedure
             </label>
             <select
-              id="procedure"
-              value={selectedProcedure}
-              onChange={(e) => handleProcedureChange(e.target.value)}
+              id="serviceOption"
+              value={selectedOption}
+              onChange={(e) => handleOptionChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
               required
             >
-              <option value="">Select a surgical procedure</option>
-              {surgicalProcedures.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+              <option value="">Select an option</option>
+              {(serviceOptionsByCategory[category] || []).map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-gray-400">
+              Selecting an option will auto-fill the name. Choose "Other (custom)" to type your own.
+            </p>
           </div>
         )}
         
