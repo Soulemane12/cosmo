@@ -13,17 +13,19 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState('Surgical');
+  const [category, setCategory] = useState('');
   const [selectedOption, setSelectedOption] = useState('');
+  const [customName, setCustomName] = useState('');
   const [error, setError] = useState('');
   
   const categoryOptions = [
-    "Non-surgical",
-    "Surgical",
-    "Injectables",
-    "Skin Treatments",
-    "Hair Restoration",
-    "Body Contouring"
+    'Surgical',
+    'Injectables',
+    'Non-surgical',
+    'Skin Treatments',
+    'Hair Restoration',
+    'Body Contouring',
+    'Other'
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,8 +33,16 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     setError('');
     
     // Validation
-    if (!selectedOption || !description || !price) {
-      setError('Please select a service/procedure and fill in description and price');
+    if (!selectedOption) {
+      setError('Please select a service/procedure');
+      return;
+    }
+    if (selectedOption === 'Other (custom)' && !customName) {
+      setError('Please enter a custom service name');
+      return;
+    }
+    if (!description || !price) {
+      setError('Please fill in description and price');
       return;
     }
     
@@ -43,13 +53,18 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
     }
     
     try {
-      const finalName = selectedOption;
+      const finalName = selectedOption !== 'Other (custom)' ? selectedOption : customName.trim();
+
+      // Derive category from the option selection
+      const derivedCategory = Object.keys(serviceOptionsByCategory).find((cat) =>
+        (serviceOptionsByCategory[cat] || []).includes(selectedOption)
+      ) || 'Other';
 
       const newService = await createNewService({
         name: finalName,
         description,
         price: priceValue,
-        category,
+        category: derivedCategory,
         provider_id: providerId
       }, providerId);
       
@@ -140,7 +155,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'Sculptra (Poly-L-Lactic Acid)',
       'Radiesse (Calcium Hydroxylapatite)',
       'Kybella (Deoxycholic Acid)',
-      'PRF/PRP Undereye'
+      'PRF/PRP Undereye',
+      'Other (custom)'
     ],
     []
   );
@@ -156,7 +172,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'HydraFacial',
       'Dermaplaning',
       'RF Skin Tightening',
-      'LED Light Therapy'
+      'LED Light Therapy',
+      'Other (custom)'
     ],
     []
   );
@@ -169,7 +186,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'Fractional CO2 Laser Resurfacing',
       'Erbium Laser Resurfacing',
       'Photodynamic Therapy (PDT)',
-      'Scar Treatment Package'
+      'Scar Treatment Package',
+      'Other (custom)'
     ],
     []
   );
@@ -179,7 +197,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'PRP/PRF Scalp',
       'Low-Level Laser Therapy (LLLT)',
       'Medical Therapy Program',
-      'FUE Hair Transplant Evaluation'
+      'FUE Hair Transplant Evaluation',
+      'Other (custom)'
     ],
     []
   );
@@ -191,7 +210,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'truSculpt',
       'SculpSure',
       'Evolve Trim/Tite/Tone',
-      'Radiofrequency Body Tightening'
+      'Radiofrequency Body Tightening',
+      'Other (custom)'
     ],
     []
   );
@@ -203,7 +223,8 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       'Non-surgical': nonSurgicalOptions,
       'Skin Treatments': skinTreatmentOptions,
       'Hair Restoration': hairRestorationOptions,
-      'Body Contouring': bodyContouringOptions
+      'Body Contouring': bodyContouringOptions,
+      'Other': ['Other (custom)']
     }),
     [
       surgicalProcedures,
@@ -217,13 +238,19 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
 
   const handleOptionChange = (value: string) => {
     setSelectedOption(value);
-    if (value) {
+    if (value && value !== 'Other (custom)') {
       setName(value);
-      // derive category from selection group
+      setCustomName('');
+      // derive category
       const derivedCategory = Object.keys(serviceOptionsByCategory).find((cat) =>
         (serviceOptionsByCategory[cat] || []).includes(value)
-      );
-      if (derivedCategory) setCategory(derivedCategory);
+      ) || '';
+      setCategory(derivedCategory);
+    } else if (value === 'Other (custom)') {
+      setCategory('Other');
+    } else {
+      setCategory('');
+      setCustomName('');
     }
   };
 
@@ -238,7 +265,6 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
       )}
       
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Name is auto-derived from the selected option; no manual input shown */}
         
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">
@@ -275,8 +301,6 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
               />
             </div>
           </div>
-          
-          {/* Category is auto-derived from the selected option; no manual input shown */}
         </div>
 
         <div>
@@ -301,8 +325,24 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
               </optgroup>
             ))}
           </select>
+          {selectedOption === 'Other (custom)' && (
+            <div className="mt-3">
+              <label htmlFor="customName" className="block text-sm font-medium text-gray-300 mb-1">
+                Custom Service Name
+              </label>
+              <input
+                id="customName"
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
+                placeholder="Enter custom service name"
+                required
+              />
+            </div>
+          )}
           <p className="mt-1 text-xs text-gray-400">
-            Selected: {selectedOption || 'None'} {selectedOption ? `• Category: ${category}` : ''}
+            This will auto-fill the service name and category based on your selection.
           </p>
         </div>
         
