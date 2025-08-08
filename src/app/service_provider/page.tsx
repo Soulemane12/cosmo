@@ -27,7 +27,7 @@ import { Provider, User } from '@/data/store';
 export default function ServiceProviderDashboard() {
   const { currentUser, isLoading } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'services' | 'requests' | 'marketplace' | 'claimed'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'marketplace' | 'accepted'>('dashboard');
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [providerDetails, setProviderDetails] = useState<Provider | null>(null);
   const [isAddServiceModalOpen, setIsAddServiceModalOpen] = useState(false);
@@ -149,7 +149,7 @@ export default function ServiceProviderDashboard() {
       const updatedProvider = await getProviderById(currentUser.id);
       setProviderDetails(updatedProvider);
       setIsAddServiceModalOpen(false);
-      setActiveTab('services');
+      setActiveTab('marketplace');
     } catch (error) {
       console.error('Error refreshing provider details:', error);
     }
@@ -198,8 +198,8 @@ export default function ServiceProviderDashboard() {
         setMarketplaceRequests(unclaimedRequests);
         setClaimedRequests(claimedRequestsData);
         
-        alert('You have successfully claimed this service request! You have 5 minutes to accept or decline.');
-        setActiveTab('claimed');
+        alert('You have successfully claimed this request! You have 5 minutes to accept or decline.');
+        setActiveTab('marketplace');
       } else {
         alert('This request was already claimed by another provider. Please try another request.');
       }
@@ -302,7 +302,7 @@ export default function ServiceProviderDashboard() {
             </div>
           </div>
 
-          {/* Tabs */}
+           {/* Tabs */}
           <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
             <nav className="flex flex-wrap -mb-px">
               <button
@@ -331,34 +331,9 @@ export default function ServiceProviderDashboard() {
                 )}
               </button>
               <button
-                onClick={() => setActiveTab('claimed')}
+                onClick={() => setActiveTab('accepted')}
                 className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'claimed'
-                    ? 'border-b-2 border-orange-500 text-orange-600 dark:text-orange-400'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                My Claims
-                {claimedRequests.length > 0 && (
-                  <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-orange-600 rounded-full">
-                    {claimedRequests.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('services')}
-                className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'services'
-                    ? 'border-b-2 border-green-500 text-green-600 dark:text-green-400'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                My Services
-              </button>
-              <button
-                onClick={() => setActiveTab('requests')}
-                className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'requests'
+                  activeTab === 'accepted'
                     ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
@@ -428,14 +403,13 @@ export default function ServiceProviderDashboard() {
                       Find new service requests to claim
                     </p>
                   </button>
-                  
                   <button
-                    onClick={() => setActiveTab('claimed')}
-                    className="p-4 border border-orange-200 dark:border-orange-700 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                    onClick={() => setActiveTab('accepted')}
+                    className="p-4 border border-green-200 dark:border-green-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
                   >
-                    <h4 className="font-medium text-orange-900 dark:text-orange-100">Review My Claims</h4>
-                    <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
-                      Accept or decline claimed requests
+                    <h4 className="font-medium text-green-900 dark:text-green-100">View Accepted Requests</h4>
+                    <p className="text-sm text-green-600 dark:text-green-300 mt-1">
+                      See your accepted jobs
                     </p>
                   </button>
                 </div>
@@ -520,255 +494,62 @@ export default function ServiceProviderDashboard() {
                   ))}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Claimed Requests tab */}
-          {activeTab === 'claimed' && (
-            <div>
-              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-                My Claimed Requests
-              </h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-6">
-                You have 5 minutes to accept or decline these requests before they expire.
-              </p>
-              
-              {claimedRequests.length === 0 ? (
-                <div className="text-center p-8 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                  <svg 
-                    className="w-12 h-12 mx-auto text-gray-400" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth="2" 
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" 
-                    />
-                  </svg>
-                  <p className="mt-4 text-gray-500 dark:text-gray-400">
-                    No claimed requests at the moment.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {claimedRequests.map(request => {
-                    const isExpired = isClaimExpired(request);
-                    const timeLeft = request.expiresAt ? Math.max(0, Math.floor((new Date(request.expiresAt).getTime() - new Date().getTime()) / 1000 / 60)) : 0;
-                    
-                    return (
-                      <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h3 className="font-semibold text-lg">Claimed Request</h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-300">
-                              Request ID: {request.id}
-                            </p>
-                            <p className="text-sm text-orange-600 dark:text-orange-400">
-                              Service ID: {request.serviceId}
-                            </p>
+              {/* My claimed (inline) */}
+              <div className="mt-10">
+                <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">My Claimed (pending response)</h3>
+                {claimedRequests.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400">No claimed requests.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {claimedRequests.map(request => {
+                      const isExpired = isClaimExpired(request);
+                      const timeLeft = request.expiresAt ? Math.max(0, Math.floor((new Date(request.expiresAt).getTime() - new Date().getTime()) / 1000 / 60)) : 0;
+                      return (
+                        <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h4 className="font-medium">Claimed Request</h4>
+                              <p className="text-xs text-gray-500">ID: {request.id}</p>
+                            </div>
+                            <span className={`px-2 py-1 text-xs rounded font-medium ${isExpired ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'}`}>
+                              {isExpired ? 'Expired' : `${timeLeft}m left`}
+                            </span>
                           </div>
-                          <span className={`px-2 py-1 text-xs rounded font-medium ${
-                            isExpired 
-                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                              : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-                          }`}>
-                            {isExpired ? 'Expired' : `${timeLeft}m left`}
-                          </span>
+                          <div className="mt-2 flex gap-2">
+                            <button onClick={() => handleAcceptClaimedRequest(request.id)} disabled={isExpired} className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded text-sm">Accept</button>
+                            <button onClick={() => handleDeclineClaimedRequest(request.id)} disabled={isExpired} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded text-sm">Decline</button>
+                          </div>
                         </div>
-                        
-                        <div className="text-sm mb-3">
-                          <p className="text-gray-600 dark:text-gray-300">
-                            <span className="font-medium">Requested:</span> {new Date(request.requestDate).toLocaleDateString()}
-                          </p>
-                          {request.scheduledDate && (
-                            <p className="text-gray-600 dark:text-gray-300">
-                              <span className="font-medium">Preferred Date:</span> {new Date(request.scheduledDate).toLocaleDateString()}
-                            </p>
-                          )}
-                          {request.notes && (
-                            <p className="text-gray-600 dark:text-gray-300 mt-2">
-                              <span className="font-medium">Notes:</span> {request.notes}
-                            </p>
-                          )}
-                        </div>
-                        
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            onClick={() => handleAcceptClaimedRequest(request.id)}
-                            disabled={isExpired}
-                            className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded transition font-medium text-sm"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleDeclineClaimedRequest(request.id)}
-                            disabled={isExpired}
-                            className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded transition font-medium text-sm"
-                          >
-                            Decline
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {activeTab === 'requests' && (
+          {activeTab === 'accepted' && (
             <div>
               <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-                Service Requests
+                Accepted Requests
               </h2>
               
-              {requests.length === 0 ? (
+              {acceptedRequests.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400">
-                  You don't have any service requests yet.
+                  You don't have any accepted requests yet.
                 </p>
               ) : (
                 <div className="space-y-8">
-                  {/* Pending Requests */}
-                  <div>
-                    <h3 className="text-lg font-medium mb-3 text-gray-700 dark:text-gray-300 flex items-center">
-                      Pending Requests
-                      {pendingRequests.length > 0 && (
-                        <span className="ml-2 bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-yellow-900 dark:text-yellow-300">
-                          {pendingRequests.length}
-                        </span>
-                      )}
-                    </h3>
-                    
-                    {pendingRequests.length === 0 ? (
-                      <p className="text-gray-500 dark:text-gray-400">
-                        No pending requests.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {pendingRequests.map((request) => (
-                          <RequestCard
-                            key={request.id}
-                            request={request}
-                            isProvider={true}
-                            onAccept={handleAcceptRequest}
-                            onDecline={handleDeclineRequest}
-                          />
-                        ))}
-                      </div>
-                    )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {acceptedRequests.map((request) => (
+                      <RequestCard
+                        key={request.id}
+                        request={request}
+                        isProvider={true}
+                      />
+                    ))}
                   </div>
-                  
-                  {/* Accepted Requests */}
-                  <div>
-                    <h3 className="text-lg font-medium mb-3 text-gray-700 dark:text-gray-300 flex items-center">
-                      Accepted Requests
-                      {acceptedRequests.length > 0 && (
-                        <span className="ml-2 bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-green-900 dark:text-green-300">
-                          {acceptedRequests.length}
-                        </span>
-                      )}
-                    </h3>
-                    
-                    {acceptedRequests.length === 0 ? (
-                      <p className="text-gray-500 dark:text-gray-400">
-                        No accepted requests.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {acceptedRequests.map((request) => (
-                          <RequestCard
-                            key={request.id}
-                            request={request}
-                            isProvider={true}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Declined Requests */}
-                  <div>
-                    <h3 className="text-lg font-medium mb-3 text-gray-700 dark:text-gray-300 flex items-center">
-                      Declined Requests
-                      {declinedRequests.length > 0 && (
-                        <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">
-                          {declinedRequests.length}
-                        </span>
-                      )}
-                    </h3>
-                    
-                    {declinedRequests.length === 0 ? (
-                      <p className="text-gray-500 dark:text-gray-400">
-                        No declined requests.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {declinedRequests.map((request) => (
-                          <RequestCard
-                            key={request.id}
-                            request={request}
-                            isProvider={true}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'services' && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-                  My Services
-                </h2>
-                <button
-                  onClick={() => setIsAddServiceModalOpen(true)}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Add Service
-                </button>
-              </div>
-              
-              {providerDetails.services.length === 0 ? (
-                <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 text-center">
-                  <div className="text-gray-500 dark:text-gray-400 mb-4">
-                    <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">No services listed</h3>
-                  <p className="mt-2 text-gray-500 dark:text-gray-400">Start by adding your first service</p>
-                  <button
-                    onClick={() => setIsAddServiceModalOpen(true)}
-                    className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                  >
-                    Add Your First Service
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {providerDetails.services.map((service) => (
-                    <ServiceCard
-                      key={service.id}
-                      service={service}
-                      isProviderView={true}
-                      showAction={true}
-                      actionLabel="Edit Service"
-                      onSelect={() => {
-                        // Service editing functionality would go here
-                        alert('Edit service functionality will be implemented soon');
-                      }}
-                    />
-                  ))}
                 </div>
               )}
             </div>
