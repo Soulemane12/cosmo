@@ -13,7 +13,7 @@ export default function AddServiceForm({ providerId, onServiceAdded, onCancel }:
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState('Surgical');
   const [selectedOption, setSelectedOption] = useState('');
   const [error, setError] = useState('');
   
