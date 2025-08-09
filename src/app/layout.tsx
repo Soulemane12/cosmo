@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/data/AuthContext";
 import CleanupProvider from "./components/CleanupProvider";
+import DebugProvider from "./components/DebugProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,7 +27,9 @@ export default function RootLayout({
       >
         <AuthProvider>
           <CleanupProvider>
-            {children}
+            <DebugProvider>
+              {children}
+            </DebugProvider>
           </CleanupProvider>
         </AuthProvider>
       </body>
