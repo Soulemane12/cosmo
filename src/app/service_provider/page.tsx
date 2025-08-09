@@ -22,7 +22,7 @@ import RequestCard from '../components/RequestCard';
 import ServiceCard from '../components/ServiceCard';
 import Modal from '../components/Modal';
 import AddServiceForm from '../components/AddServiceForm';
-import { Provider, User } from '@/data/store';
+import { Provider, User, Service, getAllServices } from '@/data/store';
 
 export default function ServiceProviderDashboard() {
   const { currentUser, isLoading } = useAuth();
@@ -41,6 +41,7 @@ export default function ServiceProviderDashboard() {
   const [claimedRequests, setClaimedRequests] = useState<ServiceRequest[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isClaiming, setIsClaiming] = useState<string | null>(null);
+  const [allServices, setAllServices] = useState<Service[]>([]);
 
   useEffect(() => {
     if (!isLoading && (!currentUser || currentUser.type !== 'provider')) {
@@ -53,17 +54,19 @@ export default function ServiceProviderDashboard() {
         setIsLoadingData(true);
         try {
           // Load all data in parallel
-          const [providerRequests, providerDetailsData, allRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
+          const [providerRequests, providerDetailsData, allRequests, unclaimedRequests, claimedRequestsData, servicesCatalog] = await Promise.all([
             getServiceRequestsByProviderId(currentUser.id),
             getProviderById(currentUser.id),
             getAllServiceRequests(),
             getUnclaimedServiceRequests(),
-            getClaimedServiceRequests(currentUser.id)
+            getClaimedServiceRequests(currentUser.id),
+            getAllServices()
           ]);
 
           setRequests(providerRequests);
           setProviderDetails(providerDetailsData);
           setClaimedRequests(claimedRequestsData);
+          setAllServices(servicesCatalog);
           
           // Build clients map
           await refreshClientsMap(providerRequests);
@@ -190,13 +193,15 @@ export default function ServiceProviderDashboard() {
       
       if (success) {
         // Refresh data
-        const [unclaimedRequests, claimedRequestsData] = await Promise.all([
+        const [unclaimedRequests, claimedRequestsData, servicesCatalog] = await Promise.all([
           getUnclaimedServiceRequests(),
-          getClaimedServiceRequests(currentUser.id)
+          getClaimedServiceRequests(currentUser.id),
+          getAllServices()
         ]);
         
         setMarketplaceRequests(unclaimedRequests);
         setClaimedRequests(claimedRequestsData);
+        setAllServices(servicesCatalog);
         
         alert('You have successfully claimed this request! You have 5 minutes to accept or decline.');
         setActiveTab('marketplace');
@@ -487,50 +492,52 @@ export default function ServiceProviderDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {getMatchingMarketplaceRequests().map(request => (
-                    <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="font-semibold text-lg">Service Request</h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-300">
-                            Request ID: {request.id}
-                          </p>
-                          <p className="text-sm text-purple-600 dark:text-purple-400">
-                            Service ID: {request.serviceId}
-                          </p>
+                  {getMatchingMarketplaceRequests().map(request => {
+                    const svc = allServices.find(s => s.id === request.serviceId);
+                    const priceFmt = svc?.price != null ? `$${Number(svc.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+                    return (
+                      <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {svc?.name || 'Service'}
+                            </h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {svc?.category ? `${svc.category}` : ''}{svc?.category && svc?.price != null ? ' · ' : ''}{svc?.price != null ? priceFmt : ''}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Request: {request.id}</p>
+                          </div>
+                          <span className="px-2 py-1 text-xs rounded font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            Available
+                          </span>
                         </div>
-                        <span className="px-2 py-1 text-xs rounded font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          Available
-                        </span>
-                      </div>
-                      
-                      <div className="text-sm mb-3">
-                        <p className="text-gray-600 dark:text-gray-300">
-                          <span className="font-medium">Requested:</span> {new Date(request.requestDate).toLocaleDateString()}
-                        </p>
-                        {request.scheduledDate && (
+                        <div className="text-sm mb-3">
                           <p className="text-gray-600 dark:text-gray-300">
-                            <span className="font-medium">Preferred Date:</span> {new Date(request.scheduledDate).toLocaleDateString()}
+                            <span className="font-medium">Requested:</span> {new Date(request.requestDate).toLocaleDateString()}
                           </p>
-                        )}
-                        {request.notes && (
-                          <p className="text-gray-600 dark:text-gray-300 mt-2">
-                            <span className="font-medium">Notes:</span> {request.notes}
-                          </p>
-                        )}
+                          {request.scheduledDate && (
+                            <p className="text-gray-600 dark:text-gray-300">
+                              <span className="font-medium">Preferred Date:</span> {new Date(request.scheduledDate).toLocaleDateString()}
+                            </p>
+                          )}
+                          {request.notes && (
+                            <p className="text-gray-600 dark:text-gray-300 mt-2">
+                              <span className="font-medium">Notes:</span> {request.notes}
+                            </p>
+                          )}
+                        </div>
+                        <div className="mt-3">
+                          <button
+                            onClick={() => handleClaimRequest(request.id)}
+                            disabled={isClaiming === request.id}
+                            className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded transition font-medium text-sm"
+                          >
+                            {isClaiming === request.id ? 'Claiming...' : 'Claim This Request'}
+                          </button>
+                        </div>
                       </div>
-                      
-                      <div className="mt-3">
-                        <button
-                          onClick={() => handleClaimRequest(request.id)}
-                          disabled={isClaiming === request.id}
-                          className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded transition font-medium text-sm"
-                        >
-                          {isClaiming === request.id ? 'Claiming...' : 'Claim This Request'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
