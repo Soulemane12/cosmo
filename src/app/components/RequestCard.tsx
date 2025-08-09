@@ -64,8 +64,11 @@ export default function RequestCard({
     );
   }
 
-  if (!service || (!isProvider && !provider && !showPendingProvider) || (isProvider && !user)) {
-    return null;
+  // Show card even if service details haven't loaded yet for providers.
+  if (!isProvider) {
+    if (!service || (!provider && !showPendingProvider)) {
+      return null;
+    }
   }
 
   const getStatusBadgeColor = (status: string) => {
@@ -112,9 +115,9 @@ export default function RequestCard({
     <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 p-4">
       <div className="flex justify-between items-start mb-3">
         <div>
-          <h3 className="font-semibold text-lg">{service.name}</h3>
+          <h3 className="font-semibold text-lg">{service?.name || 'Service'}</h3>
           {isProvider ? (
-            <p className="text-sm text-gray-600 dark:text-gray-300">Requested by: {user?.name}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">Requested by: {user?.name || 'Client'}</p>
           ) : (
             showPendingProvider ? (
               <p className="text-sm text-purple-600 dark:text-purple-400">
