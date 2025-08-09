@@ -7,10 +7,16 @@ export const signUpUser = async (email: string, password: string, userData: {
   user_type: 'user' | 'provider';
 }) => {
   try {
+    const emailRedirectTo =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/login`
+        : (process.env.NEXT_PUBLIC_SITE_URL ? `${process.env.NEXT_PUBLIC_SITE_URL}/login` : undefined);
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo,
         data: {
           name: userData.name,
           location: userData.location,
@@ -21,6 +27,11 @@ export const signUpUser = async (email: string, password: string, userData: {
 
     if (error) {
       console.error('Sign up error:', error);
+      // Extra diagnostics for logging pipeline
+      try {
+        const anyErr = error as unknown as { name?: string; status?: number; message?: string };
+        console.error('Sign up error details', { name: anyErr?.name, status: anyErr?.status, message: anyErr?.message });
+      } catch {}
       return { success: false, error: error.message };
     }
 
@@ -50,6 +61,11 @@ export const signInUser = async (email: string, password: string) => {
 
     if (error) {
       console.error('Sign in error:', error);
+      // Extra diagnostics for logging pipeline
+      try {
+        const anyErr = error as unknown as { name?: string; status?: number; message?: string };
+        console.error('Sign in error details', { name: anyErr?.name, status: anyErr?.status, message: anyErr?.message });
+      } catch {}
       return { success: false, error: error.message };
     }
 
