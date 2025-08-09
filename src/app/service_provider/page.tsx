@@ -42,6 +42,7 @@ export default function ServiceProviderDashboard() {
   const [claimedRequests, setClaimedRequests] = useState<ServiceRequest[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isClaiming, setIsClaiming] = useState<string | null>(null);
+  const [serviceDetails, setServiceDetails] = useState<Record<string, { name: string; category: string; price: number }>>({});
 
   useEffect(() => {
     if (!isLoading && (!currentUser || currentUser.type !== 'provider')) {
@@ -81,6 +82,34 @@ export default function ServiceProviderDashboard() {
       loadData();
     }
   }, [currentUser, isLoading, router]);
+
+  // Load service details for marketplace cards so providers see readable info
+  useEffect(() => {
+    const loadServices = async () => {
+      try {
+        const ids = Array.from(new Set(marketplaceRequests.map(r => r.serviceId)));
+        const missing = ids.filter(id => !serviceDetails[id]);
+        if (missing.length === 0) return;
+
+        const updates: Record<string, { name: string; category: string; price: number }> = {};
+        // Fetch sequentially; counts are usually small. Could be batched later.
+        for (const id of missing) {
+          const svc = await getServiceById(id);
+          if (svc) {
+            updates[id] = { name: svc.name, category: svc.category, price: svc.price };
+          }
+        }
+        if (Object.keys(updates).length > 0) {
+          setServiceDetails(prev => ({ ...prev, ...updates }));
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    if (marketplaceRequests.length > 0) {
+      loadServices();
+    }
+  }, [marketplaceRequests, serviceDetails]);
 
   // Realtime: update provider view when new requests arrive or change
   useEffect(() => {
@@ -540,50 +569,58 @@ export default function ServiceProviderDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {getMatchingMarketplaceRequests().map(request => (
-                    <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="font-semibold text-lg">Service Request</h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-300">
-                            Request ID: {request.id}
-                          </p>
-                          <p className="text-sm text-purple-600 dark:text-purple-400">
-                            Service ID: {request.serviceId}
-                          </p>
+                  {getMatchingMarketplaceRequests().map(request => {
+                    const svc = serviceDetails[request.serviceId];
+                    return (
+                      <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="font-semibold text-lg">{svc?.name || 'Service Request'}</h3>
+                            <p className="text-xs text-gray-500">Request ID: {request.id}</p>
+                            {svc && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                                <span className="font-medium">Category:</span> {svc.category}
+                              </p>
+                            )}
+                            {svc && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                <span className="font-medium">Price:</span> ${svc.price.toFixed(2)}
+                              </p>
+                            )}
+                          </div>
+                          <span className="px-2 py-1 text-xs rounded font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            Available
+                          </span>
                         </div>
-                        <span className="px-2 py-1 text-xs rounded font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          Available
-                        </span>
-                      </div>
-                      
-                      <div className="text-sm mb-3">
-                        <p className="text-gray-600 dark:text-gray-300">
-                          <span className="font-medium">Requested:</span> {new Date(request.requestDate).toLocaleDateString()}
-                        </p>
-                        {request.scheduledDate && (
+
+                        <div className="text-sm mb-3">
                           <p className="text-gray-600 dark:text-gray-300">
-                            <span className="font-medium">Preferred Date:</span> {new Date(request.scheduledDate).toLocaleDateString()}
+                            <span className="font-medium">Requested:</span> {new Date(request.requestDate).toLocaleDateString()}
                           </p>
-                        )}
-                        {request.notes && (
-                          <p className="text-gray-600 dark:text-gray-300 mt-2">
-                            <span className="font-medium">Notes:</span> {request.notes}
-                          </p>
-                        )}
+                          {request.scheduledDate && (
+                            <p className="text-gray-600 dark:text-gray-300">
+                              <span className="font-medium">Preferred Date:</span> {new Date(request.scheduledDate).toLocaleDateString()}
+                            </p>
+                          )}
+                          {request.notes && (
+                            <p className="text-gray-600 dark:text-gray-300 mt-2">
+                              <span className="font-medium">Notes:</span> {request.notes}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="mt-3">
+                          <button
+                            onClick={() => handleClaimRequest(request.id)}
+                            disabled={isClaiming === request.id}
+                            className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded transition font-medium text-sm"
+                          >
+                            {isClaiming === request.id ? 'Claiming...' : 'Claim This Request'}
+                          </button>
+                        </div>
                       </div>
-                      
-                      <div className="mt-3">
-                        <button
-                          onClick={() => handleClaimRequest(request.id)}
-                          disabled={isClaiming === request.id}
-                          className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded transition font-medium text-sm"
-                        >
-                          {isClaiming === request.id ? 'Claiming...' : 'Claim This Request'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
