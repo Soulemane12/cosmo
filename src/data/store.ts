@@ -80,6 +80,47 @@ export type Notification = {
 import { supabase } from '../lib/supabase';
 import { signUpUser, signInUser, signOutUser, getCurrentUser } from '../lib/auth';
 
+// Catalog types (predefined service names pulled from DB)
+export type ServiceCatalogItem = {
+  id: string;
+  name: string;
+  category: string;
+  description?: string | null;
+  default_price?: number | null;
+  is_active: boolean;
+  sort_order?: number | null;
+};
+
+export const getServiceCatalog = async (): Promise<ServiceCatalogItem[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('service_catalog')
+      .select('id, name, category, description, default_price, sort_order, is_active')
+      .eq('is_active', true)
+      .order('category', { ascending: true })
+      .order('sort_order', { ascending: true, nullsFirst: true })
+      .order('name', { ascending: true });
+
+    if (error || !data) {
+      console.error('Get service catalog error:', error);
+      return [];
+    }
+
+    return data.map(row => ({
+      id: row.id,
+      name: row.name,
+      category: row.category,
+      description: row.description ?? null,
+      default_price: row.default_price ?? null,
+      is_active: row.is_active,
+      sort_order: row.sort_order ?? null,
+    }));
+  } catch (error) {
+    console.error('Get service catalog error:', error);
+    return [];
+  }
+};
+
 // Auth functions
 export const loginUser = async (email: string, password: string): Promise<AuthUser | null> => {
   try {
