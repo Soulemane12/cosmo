@@ -895,30 +895,28 @@ export const getClaimedServiceRequests = async (providerId: string): Promise<Ser
   }
 };
 
-export const createServiceRequest = async (request: Omit<ServiceRequest, 'id'>): Promise<ServiceRequest | null> => {
+// Allow providerId to be optional to create marketplace (unassigned) requests
+export const createServiceRequest = async (request: Omit<ServiceRequest, 'id' | 'providerId'> & { providerId?: string }): Promise<ServiceRequest | null> => {
   try {
-    // Validate provider-service ownership and disallow generic ('pending') provider requests
-    if (!request.providerId || request.providerId === 'pending') {
-      console.error('Create request validation failed: providerId is required and cannot be "pending"');
-      return null;
-    }
+    // If providerId provided, enforce service belongs to that provider; otherwise allow unassigned
+    if (request.providerId) {
+      const { data: svc, error: svcErr } = await supabase
+        .from('services')
+        .select('id, provider_id')
+        .eq('id', request.serviceId)
+        .single();
 
-    const { data: svc, error: svcErr } = await supabase
-      .from('services')
-      .select('id, provider_id')
-      .eq('id', request.serviceId)
-      .single();
-
-    if (svcErr || !svc || svc.provider_id !== request.providerId) {
-      console.error('Create request validation failed: service does not belong to provider');
-      return null;
+      if (svcErr || !svc || svc.provider_id !== request.providerId) {
+        console.error('Create request validation failed: service does not belong to provider');
+        return null;
+      }
     }
 
     const { data: newRequest, error } = await supabase
       .from('service_requests')
       .insert({
         user_id: request.userId,
-        provider_id: request.providerId,
+        provider_id: request.providerId ?? null,
         service_id: request.serviceId,
         status: request.status,
         request_date: request.requestDate,

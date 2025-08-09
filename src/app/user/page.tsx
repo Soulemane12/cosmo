@@ -130,10 +130,9 @@ export default function UserDashboard() {
     if (!currentUser) return;
     
     try {
-      // Convert cart items to service requests
+      // Convert cart items to service requests as marketplace entries (unassigned)
       for (const item of cart.items) {
         await createServiceRequest({
-          providerId: item.providerId,
           serviceId: item.serviceId,
           userId: currentUser.id,
           notes: "Ordered through cart checkout",
