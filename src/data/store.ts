@@ -1005,6 +1005,25 @@ export const declineClaimedRequest = async (requestId: string, providerId: strin
   }
 };
 
+export const deleteServiceRequest = async (id: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('service_requests')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Delete service request error:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Delete service request error:', error);
+    return false;
+  }
+};
+
 export const updateServiceRequestStatus = async (id: string, status: RequestStatus, providerId?: string): Promise<ServiceRequest | null> => {
   try {
     const updateData: any = { status };

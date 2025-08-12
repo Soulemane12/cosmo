@@ -20,6 +20,7 @@ import AppHeader from '../components/AppHeader';
 import ServiceCard from '../components/ServiceCard';
 import Modal from '../components/Modal';
 import RequestCard from '../components/RequestCard';
+import { deleteServiceRequest } from '@/data/store';
 import CartDisplay from '../components/CartDisplay';
 
 export default function UserDashboard() {
@@ -296,11 +297,29 @@ export default function UserDashboard() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {requests.map((request) => (
-                    <RequestCard
-                      key={request.id}
-                      request={request}
-                      showPendingProvider={request.providerId === 'pending'}
-                    />
+                    <div key={request.id} className="relative">
+                      <RequestCard
+                        request={request}
+                        showPendingProvider={request.providerId === 'pending'}
+                      />
+                      <div className="absolute top-2 right-2">
+                        <button
+                          onClick={async () => {
+                            if (!confirm('Cancel this request?')) return;
+                            const ok = await deleteServiceRequest(request.id);
+                            if (ok) {
+                              const updated = await getServiceRequestsByUserId(currentUser.id);
+                              setRequests(updated);
+                            } else {
+                              alert('Failed to remove request.');
+                            }
+                          }}
+                          className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

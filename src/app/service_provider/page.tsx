@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { 
+  import { 
   updateServiceRequestStatus, 
   getServiceRequestsByProviderId,
   getProviderById,
@@ -13,7 +13,8 @@ import {
   getClaimedServiceRequests,
   claimServiceRequest,
   acceptClaimedRequest,
-  declineClaimedRequest
+    declineClaimedRequest,
+    deleteServiceRequest
 } from '@/data/store';
 import { useAuth } from '@/data/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -349,6 +350,26 @@ export default function ServiceProviderDashboard() {
     } catch (error) {
       console.error('Error declining claimed request:', error);
       alert('Failed to decline request. Please try again.');
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!confirm('Delete this request? This cannot be undone.')) return;
+    const ok = await deleteServiceRequest(requestId);
+    if (ok) {
+      // Refresh lists
+      if (!currentUser) return;
+      const [providerRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
+        getServiceRequestsByProviderId(currentUser.id),
+        getUnclaimedServiceRequests(),
+        getClaimedServiceRequests(currentUser.id)
+      ]);
+      setRequests(providerRequests);
+      setMarketplaceRequests(unclaimedRequests);
+      setClaimedRequests(claimedRequestsData);
+      await refreshClientsMap(providerRequests);
+    } else {
+      alert('Failed to delete request');
     }
   };
 
