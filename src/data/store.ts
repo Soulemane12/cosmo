@@ -121,62 +121,6 @@ export const getServiceCatalog = async (): Promise<ServiceCatalogItem[]> => {
   }
 };
 
-// Update service catalog with only the three specified services
-export const updateServiceCatalog = async (): Promise<boolean> => {
-  try {
-    // First, deactivate all existing services
-    const { error: deactivateError } = await supabase
-      .from('service_catalog')
-      .update({ is_active: false })
-      .eq('is_active', true);
-
-    if (deactivateError) {
-      console.error('Deactivate services error:', deactivateError);
-      return false;
-    }
-
-    // Insert the three new services
-    const { error: insertError } = await supabase
-      .from('service_catalog')
-      .insert([
-        {
-          category: 'Injectables',
-          name: 'Filler',
-          description: 'Appointment duration: 30-40mins',
-          default_price: 900,
-          sort_order: 10,
-          is_active: true
-        },
-        {
-          category: 'IV Therapy',
-          name: 'IV Therapy',
-          description: 'Appointment duration: 30-40 mins. There are two IV treatments: Immunity Boost and Inner Beauty',
-          default_price: 350,
-          sort_order: 20,
-          is_active: true
-        },
-        {
-          category: 'Injectables',
-          name: 'Neurotoxin',
-          description: 'Appointment duration: varies by treatment area',
-          default_price: 20,
-          sort_order: 30,
-          is_active: true
-        }
-      ]);
-
-    if (insertError) {
-      console.error('Insert new services error:', insertError);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Update service catalog error:', error);
-    return false;
-  }
-};
-
 // Auth functions
 export const loginUser = async (email: string, password: string): Promise<AuthUser | null> => {
   try {

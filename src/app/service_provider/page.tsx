@@ -15,7 +15,7 @@ import React, { useState, useEffect } from 'react';
   acceptClaimedRequest,
     declineClaimedRequest,
     deleteServiceRequest
-} from '@/data/store';
+  } from '@/data/store';
 import { useAuth } from '@/data/AuthContext';
 import { useRouter } from 'next/navigation';
 import AppHeader from '../components/AppHeader';
@@ -25,6 +25,7 @@ import Modal from '../components/Modal';
 import AddServiceForm from '../components/AddServiceForm';
 import { Provider, User } from '@/data/store';
   import { supabase } from '@/lib/supabase';
+import EditRequestModal from '../components/EditRequestModal';
 
 export default function ServiceProviderDashboard() {
   const { currentUser, isLoading } = useAuth();
@@ -44,6 +45,8 @@ export default function ServiceProviderDashboard() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isClaiming, setIsClaiming] = useState<string | null>(null);
   const [serviceDetails, setServiceDetails] = useState<Record<string, { name: string; category: string; price: number }>>({});
+  const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && (!currentUser || currentUser.type !== 'provider')) {
@@ -164,34 +167,96 @@ export default function ServiceProviderDashboard() {
     };
   }, [currentUser]);
 
-  // Handle accepting a request
-  const handleAcceptRequest = async (id: string) => {
+  // Handle accepting a claimed request
+  const handleAcceptClaimedRequest = async (requestId: string) => {
     if (!currentUser) return;
     
     try {
-      await updateServiceRequestStatus(id, 'accepted');
-      const updatedRequests = await getServiceRequestsByProviderId(currentUser.id);
-      setRequests(updatedRequests);
+      const success = await acceptClaimedRequest(requestId, currentUser.id);
       
-      // Update clients map
-      await refreshClientsMap(updatedRequests);
+      if (success) {
+        // Refresh data
+        const [providerRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
+          getServiceRequestsByProviderId(currentUser.id),
+          getUnclaimedServiceRequests(),
+          getClaimedServiceRequests(currentUser.id)
+        ]);
+        
+        setRequests(providerRequests);
+        setMarketplaceRequests(unclaimedRequests);
+        setClaimedRequests(claimedRequestsData);
+        
+        // Update clients map
+        await refreshClientsMap(providerRequests);
+        
+        alert('Service request accepted successfully!');
+      } else {
+        alert('Failed to accept request. It may have expired or been claimed by another provider.');
+      }
+    } catch (error) {
+      console.error('Error accepting claimed request:', error);
+      alert('Failed to accept request. Please try again.');
+    }
+  };
+
+  // Handle accepting a pending request (assigned to provider)
+  const handleAcceptRequest = async (requestId: string) => {
+    if (!currentUser) return;
+    
+    try {
+      const updatedRequest = await updateServiceRequestStatus(requestId, 'accepted', currentUser.id);
+      
+      if (updatedRequest) {
+        // Refresh data
+        const [providerRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
+          getServiceRequestsByProviderId(currentUser.id),
+          getUnclaimedServiceRequests(),
+          getClaimedServiceRequests(currentUser.id)
+        ]);
+        
+        setRequests(providerRequests);
+        setMarketplaceRequests(unclaimedRequests);
+        setClaimedRequests(claimedRequestsData);
+        
+        // Update clients map
+        await refreshClientsMap(providerRequests);
+        
+        alert('Service request accepted successfully!');
+      } else {
+        alert('Failed to accept request. Please try again.');
+      }
     } catch (error) {
       console.error('Error accepting request:', error);
       alert('Failed to accept request. Please try again.');
     }
   };
 
-  // Handle declining a request
-  const handleDeclineRequest = async (id: string) => {
+  // Handle declining a pending request (assigned to provider)
+  const handleDeclineRequest = async (requestId: string) => {
     if (!currentUser) return;
     
     try {
-      await updateServiceRequestStatus(id, 'declined');
-      const updatedRequests = await getServiceRequestsByProviderId(currentUser.id);
-      setRequests(updatedRequests);
+      const updatedRequest = await updateServiceRequestStatus(requestId, 'declined', currentUser.id);
       
-      // Update clients map
-      await refreshClientsMap(updatedRequests);
+      if (updatedRequest) {
+        // Refresh data
+        const [providerRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
+          getServiceRequestsByProviderId(currentUser.id),
+          getUnclaimedServiceRequests(),
+          getClaimedServiceRequests(currentUser.id)
+        ]);
+        
+        setRequests(providerRequests);
+        setMarketplaceRequests(unclaimedRequests);
+        setClaimedRequests(claimedRequestsData);
+        
+        // Update clients map
+        await refreshClientsMap(providerRequests);
+        
+        alert('Service request declined successfully!');
+      } else {
+        alert('Failed to decline request. Please try again.');
+      }
     } catch (error) {
       console.error('Error declining request:', error);
       alert('Failed to decline request. Please try again.');
@@ -294,62 +359,24 @@ export default function ServiceProviderDashboard() {
     }
   };
 
-  // Handle accepting a claimed request
-  const handleAcceptClaimedRequest = async (requestId: string) => {
-    if (!currentUser) return;
-    
-    try {
-      const success = await acceptClaimedRequest(requestId, currentUser.id);
-      
-      if (success) {
-        // Refresh data
-        const [providerRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
-          getServiceRequestsByProviderId(currentUser.id),
-          getUnclaimedServiceRequests(),
-          getClaimedServiceRequests(currentUser.id)
-        ]);
-        
-        setRequests(providerRequests);
-        setMarketplaceRequests(unclaimedRequests);
-        setClaimedRequests(claimedRequestsData);
-        
-        // Update clients map
-        await refreshClientsMap(providerRequests);
-        
-        alert('Service request accepted successfully!');
-      } else {
-        alert('Failed to accept request. It may have expired or been claimed by another provider.');
-      }
-    } catch (error) {
-      console.error('Error accepting claimed request:', error);
-      alert('Failed to accept request. Please try again.');
-    }
-  };
-
   // Handle declining a claimed request
   const handleDeclineClaimedRequest = async (requestId: string) => {
     if (!currentUser) return;
     
-    try {
-      const success = await declineClaimedRequest(requestId, currentUser.id);
-      
-      if (success) {
-        // Refresh data
-        const [unclaimedRequests, claimedRequestsData] = await Promise.all([
-          getUnclaimedServiceRequests(),
-          getClaimedServiceRequests(currentUser.id)
-        ]);
-        
-        setMarketplaceRequests(unclaimedRequests);
-        setClaimedRequests(claimedRequestsData);
-        
-        alert('Service request declined. It is now available for other providers.');
-      } else {
-        alert('Failed to decline request. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error declining claimed request:', error);
-      alert('Failed to decline request. Please try again.');
+    const success = await declineClaimedRequest(requestId, currentUser.id);
+    if (success) {
+      // Refresh lists
+      const [providerRequests, unclaimedRequests, claimedRequestsData] = await Promise.all([
+        getServiceRequestsByProviderId(currentUser.id),
+        getUnclaimedServiceRequests(),
+        getClaimedServiceRequests(currentUser.id)
+      ]);
+      setRequests(providerRequests);
+      setMarketplaceRequests(unclaimedRequests);
+      setClaimedRequests(claimedRequestsData);
+      await refreshClientsMap(providerRequests);
+    } else {
+      alert('Failed to decline request');
     }
   };
 
@@ -371,6 +398,18 @@ export default function ServiceProviderDashboard() {
     } else {
       alert('Failed to delete request');
     }
+  };
+
+  const handleEditRequest = (request: ServiceRequest) => {
+    setEditingRequest(request);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = (updatedRequest: ServiceRequest) => {
+    // Update the request in all relevant lists
+    setRequests(prev => prev.map(r => r.id === updatedRequest.id ? updatedRequest : r));
+    setMarketplaceRequests(prev => prev.map(r => r.id === updatedRequest.id ? updatedRequest : r));
+    setClaimedRequests(prev => prev.map(r => r.id === updatedRequest.id ? updatedRequest : r));
   };
 
   if (isLoading || !currentUser || !providerDetails || isLoadingData) {
@@ -590,58 +629,16 @@ export default function ServiceProviderDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {getMatchingMarketplaceRequests().map(request => {
-                    const svc = serviceDetails[request.serviceId];
-                    return (
-                      <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <h3 className="font-semibold text-lg">{svc?.name || 'Service Request'}</h3>
-                            <p className="text-xs text-gray-500">Request ID: {request.id}</p>
-                            {svc && (
-                              <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                                <span className="font-medium">Category:</span> {svc.category}
-                              </p>
-                            )}
-                            {svc && (
-                              <p className="text-sm text-gray-700 dark:text-gray-300">
-                                <span className="font-medium">Price:</span> ${svc.price.toFixed(2)}
-                              </p>
-                            )}
-                          </div>
-                          <span className="px-2 py-1 text-xs rounded font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                            Available
-                          </span>
-                        </div>
-
-                        <div className="text-sm mb-3">
-                          <p className="text-gray-600 dark:text-gray-300">
-                            <span className="font-medium">Requested:</span> {new Date(request.requestDate).toLocaleDateString()}
-                          </p>
-                          {request.scheduledDate && (
-                            <p className="text-gray-600 dark:text-gray-300">
-                              <span className="font-medium">Preferred Date:</span> {new Date(request.scheduledDate).toLocaleDateString()}
-                            </p>
-                          )}
-                          {request.notes && (
-                            <p className="text-gray-600 dark:text-gray-300 mt-2">
-                              <span className="font-medium">Notes:</span> {request.notes}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="mt-3">
-                          <button
-                            onClick={() => handleClaimRequest(request.id)}
-                            disabled={isClaiming === request.id}
-                            className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded transition font-medium text-sm"
-                          >
-                            {isClaiming === request.id ? 'Claiming...' : 'Claim This Request'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {getMatchingMarketplaceRequests().map(request => (
+                    <RequestCard
+                      key={request.id}
+                      request={request}
+                      isProvider={true}
+                      onAccept={handleClaimRequest}
+                      onEdit={handleEditRequest}
+                      onDelete={handleDeleteRequest}
+                    />
+                  ))}
                 </div>
               )}
 
@@ -659,6 +656,8 @@ export default function ServiceProviderDashboard() {
                         isProvider={true}
                         onAccept={handleAcceptRequest}
                         onDecline={handleDeclineRequest}
+                        onEdit={handleEditRequest}
+                        onDelete={handleDeleteRequest}
                       />
                     ))}
                   </div>
@@ -672,27 +671,17 @@ export default function ServiceProviderDashboard() {
                   <p className="text-gray-500 dark:text-gray-400">No claimed requests.</p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {claimedRequests.map(request => {
-                      const isExpired = isClaimExpired(request);
-                      const timeLeft = request.expiresAt ? Math.max(0, Math.floor((new Date(request.expiresAt).getTime() - new Date().getTime()) / 1000 / 60)) : 0;
-                      return (
-                        <div key={request.id} className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-800 p-4">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h4 className="font-medium">Claimed Request</h4>
-                              <p className="text-xs text-gray-500">ID: {request.id}</p>
-                            </div>
-                            <span className={`px-2 py-1 text-xs rounded font-medium ${isExpired ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'}`}>
-                              {isExpired ? 'Expired' : `${timeLeft}m left`}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex gap-2">
-                            <button onClick={() => handleAcceptClaimedRequest(request.id)} disabled={isExpired} className="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded text-sm">Accept</button>
-                            <button onClick={() => handleDeclineClaimedRequest(request.id)} disabled={isExpired} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded text-sm">Decline</button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {claimedRequests.map((request) => (
+                      <RequestCard
+                        key={request.id}
+                        request={request}
+                        isProvider={true}
+                        onAccept={handleAcceptClaimedRequest}
+                        onDecline={handleDeclineClaimedRequest}
+                        onEdit={handleEditRequest}
+                        onDelete={handleDeleteRequest}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -717,6 +706,8 @@ export default function ServiceProviderDashboard() {
                         key={request.id}
                         request={request}
                         isProvider={true}
+                        onEdit={handleEditRequest}
+                        onDelete={handleDeleteRequest}
                       />
                     ))}
                   </div>
@@ -739,6 +730,16 @@ export default function ServiceProviderDashboard() {
           onCancel={() => setIsAddServiceModalOpen(false)}
         />
       </Modal>
+
+      <EditRequestModal
+        request={editingRequest}
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingRequest(null);
+        }}
+        onSave={handleSaveEdit}
+      />
     </div>
   );
 } 

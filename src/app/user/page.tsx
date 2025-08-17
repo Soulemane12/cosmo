@@ -1,186 +1,98 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Service, 
-  Provider, 
-  createServiceRequest, 
-  getServiceRequestsByUserId,
-  getUserById,
-  getCartByUserId,
-  addToCart,
-  clearCart,
-  getAllServices,
-  getAllProviders
-} from '@/data/store';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/data/AuthContext';
-import { useRouter } from 'next/navigation';
-import AppHeader from '../components/AppHeader';
-// Provider browsing removed; clients browse services only
-import ServiceCard from '../components/ServiceCard';
-import Modal from '../components/Modal';
+import { 
+  getServiceRequestsByUserId, 
+  getServiceById, 
+  getProviderById,
+  ServiceRequest,
+  Service,
+  Provider,
+  deleteServiceRequest
+} from '@/data/store';
 import RequestCard from '../components/RequestCard';
-import { deleteServiceRequest } from '@/data/store';
-import CartDisplay from '../components/CartDisplay';
+import EditRequestModal from '../components/EditRequestModal';
 
 export default function UserDashboard() {
-  const { currentUser, isLoading } = useAuth();
-  const router = useRouter();
-  // Provider selection removed
-  // Request flow removed: clients must add to cart and checkout
-  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'services' | 'requests' | 'cart'>('services');
-  const [requests, setRequests] = useState<Array<any>>([]);
-  const [userDetails, setUserDetails] = useState<any>(null);
-  const [cart, setCart] = useState<any>({ items: [] });
-  const [allServices, setAllServices] = useState<Service[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [isGenericRequestModalOpen, setIsGenericRequestModalOpen] = useState(false);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [cartToast, setCartToast] = useState<{ visible: boolean; service?: Service }>({ visible: false });
-  const cartToastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const { currentUser } = useAuth();
+  const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [services, setServices] = useState<Map<string, Service>>(new Map());
+  const [providers, setProviders] = useState<Map<string, Provider>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
-    // Check if user is authenticated and is a client
-    if (!isLoading && (!currentUser || currentUser.type !== 'user')) {
-      router.push('/login');
-      return;
-    }
-
     if (currentUser) {
-      const loadData = async () => {
-        setIsLoadingData(true);
-        try {
-          // Load all data in parallel
-          const [userRequests, userDetailsData, userCart, servicesData, providersData] = await Promise.all([
-            getServiceRequestsByUserId(currentUser.id),
-            getUserById(currentUser.id),
-            getCartByUserId(currentUser.id),
-            getAllServices(),
-            getAllProviders()
-          ]);
-
-          setRequests(userRequests);
-          setUserDetails(userDetailsData);
-          setCart(userCart || { items: [] });
-          setAllServices(servicesData);
-          setProviders(providersData);
-        } catch (error) {
-          console.error('Error loading data:', error);
-        } finally {
-          setIsLoadingData(false);
-        }
-      };
-
-      loadData();
+      loadRequests();
     }
-  }, [currentUser, isLoading, router]);
+  }, [currentUser]);
 
-  // Direct request flow removed
-
-  // Viewing provider services removed
-
-  // Selecting service opens request flow removed
-
-  // Handle adding a service to cart
-  const handleAddToCart = async (service: Service) => {
+  const loadRequests = async () => {
     if (!currentUser) return;
     
+    setIsLoading(true);
     try {
-      await addToCart(currentUser.id, service.id, service.provider_id);
-      const updatedCart = await getCartByUserId(currentUser.id);
-      setCart(updatedCart || { items: [] });
+      const userRequests = await getServiceRequestsByUserId(currentUser.id);
+      setRequests(userRequests);
       
-      // Show toast confirmation
-      setCartToast({ visible: true, service });
-      if (cartToastTimerRef.current) clearTimeout(cartToastTimerRef.current);
-      cartToastTimerRef.current = setTimeout(() => {
-        setCartToast({ visible: false });
-      }, 3500);
+      // Load related services and providers
+      const serviceIds = [...new Set(userRequests.map(r => r.serviceId))];
+      const providerIds = [...new Set(userRequests.map(r => r.providerId).filter(Boolean))];
+      
+      const [servicesData, providersData] = await Promise.all([
+        Promise.all(serviceIds.map(id => getServiceById(id))),
+        Promise.all(providerIds.map(id => getProviderById(id)))
+      ]);
+      
+      const servicesMap = new Map();
+      const providersMap = new Map();
+      
+      servicesData.forEach(service => {
+        if (service) servicesMap.set(service.id, service);
+      });
+      
+      providersData.forEach(provider => {
+        if (provider) providersMap.set(provider.id, provider);
+      });
+      
+      setServices(servicesMap);
+      setProviders(providersMap);
     } catch (error) {
-      console.error('Error adding to cart:', error);
-      setCartToast({ visible: true });
-      if (cartToastTimerRef.current) clearTimeout(cartToastTimerRef.current);
-      cartToastTimerRef.current = setTimeout(() => setCartToast({ visible: false }), 3500);
+      console.error('Error loading requests:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleAddOneMore = async () => {
-    if (!currentUser || !cartToast.service) return;
-    try {
-      await addToCart(currentUser.id, cartToast.service.id, cartToast.service.provider_id);
-      const updatedCart = await getCartByUserId(currentUser.id);
-      setCart(updatedCart || { items: [] });
-      // keep toast visible a bit longer
-      if (cartToastTimerRef.current) clearTimeout(cartToastTimerRef.current);
-      cartToastTimerRef.current = setTimeout(() => setCartToast({ visible: false }), 3000);
-    } catch (e) {
-      // ignore
-    }
+  const handleEditRequest = (request: ServiceRequest) => {
+    setEditingRequest(request);
+    setIsEditModalOpen(true);
   };
 
-  // Handle cart checkout
-  const handleCheckout = () => {
-    if (!currentUser || cart.items.length === 0) return;
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!confirm('Are you sure you want to delete this request?')) return;
     
-    setIsCheckoutModalOpen(true);
-  };
-
-  // Handle completing checkout
-  const handleCompleteCheckout = async () => {
-    if (!currentUser) return;
-    
-    try {
-      // Convert cart items to service requests as marketplace entries (unassigned)
-      for (const item of cart.items) {
-        await createServiceRequest({
-          serviceId: item.serviceId,
-          userId: currentUser.id,
-          notes: "Ordered through cart checkout",
-          requestDate: new Date().toISOString().split('T')[0],
-          status: 'pending'
-        });
-      }
-      
-      // Clear the cart
-      await clearCart(currentUser.id);
-      const updatedCart = await getCartByUserId(currentUser.id);
-      setCart(updatedCart || { items: [] });
-      
-      // Update requests
-      const updatedRequests = await getServiceRequestsByUserId(currentUser.id);
-      setRequests(updatedRequests);
-      
-      // Close modal and show confirmation
-      setIsCheckoutModalOpen(false);
-      alert('Thank you for your order! You can track your requests in the "My Requests" tab.');
-      setActiveTab('requests');
-    } catch (error) {
-      console.error('Error completing checkout:', error);
-      alert('Failed to complete checkout. Please try again.');
+    const success = await deleteServiceRequest(requestId);
+    if (success) {
+      setRequests(prev => prev.filter(r => r.id !== requestId));
+    } else {
+      alert('Failed to delete request');
     }
   };
 
-  // Handle refreshing cart
-  const handleRefreshCart = async () => {
-    if (!currentUser) return;
-    try {
-      const updatedCart = await getCartByUserId(currentUser.id);
-      setCart(updatedCart || { items: [] });
-    } catch (error) {
-      console.error('Error refreshing cart:', error);
-    }
+  const handleSaveEdit = (updatedRequest: ServiceRequest) => {
+    setRequests(prev => prev.map(r => r.id === updatedRequest.id ? updatedRequest : r));
   };
 
-  // Generic marketplace request flow removed
-
-  if (isLoading || !currentUser || !userDetails || isLoadingData) {
+  if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <AppHeader currentPath="/user" />
-        <div className="max-w-7xl mx-auto py-12 px-4 text-center">
-          <div className="animate-pulse h-8 w-48 bg-gray-300 dark:bg-gray-700 rounded mx-auto mb-4"></div>
-          <div className="animate-pulse h-4 w-64 bg-gray-200 dark:bg-gray-800 rounded mx-auto"></div>
+        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="px-4 py-6 sm:px-0">
+            <p>Please log in to view your dashboard.</p>
+          </div>
         </div>
       </div>
     );
@@ -188,106 +100,26 @@ export default function UserDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <AppHeader currentPath="/user" />
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="mb-6">
-            <div className="flex flex-wrap items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Welcome, {userDetails.name}
-                </h1>
-                <p className="text-gray-500 dark:text-gray-400">
-                  Find and book cosmetic services
-                </p>
-              </div>
-              
-              {cart.items.length > 0 && (
-                <button
-                  onClick={() => setActiveTab('cart')}
-                  className="flex items-center mt-2 sm:mt-0 bg-indigo-100 dark:bg-indigo-900 hover:bg-indigo-200 dark:hover:bg-indigo-800 px-4 py-2 rounded-lg transition"
-                >
-                  <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <span className="ml-2 text-indigo-800 dark:text-indigo-200 font-medium">{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} in cart</span>
-                </button>
-              )}
-            </div>
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Welcome, {currentUser.name}!
+            </h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-300">
+              Manage your service requests and track their progress.
+            </p>
           </div>
 
-          {/* Tabs */}
-          <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-            <nav className="flex flex-wrap -mb-px">
-              <button
-                onClick={() => setActiveTab('services')}
-                className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'services'
-                    ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                Services
-              </button>
-              <button
-                onClick={() => setActiveTab('requests')}
-                className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'requests'
-                    ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                My Requests
-              </button>
-              <button
-                onClick={() => setActiveTab('cart')}
-                className={`py-4 px-6 text-sm font-medium ${
-                  activeTab === 'cart'
-                    ? 'border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                Shopping Cart
-                {cart.items.length > 0 && (
-                  <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-indigo-600 rounded-full">
-                    {cart.items.length}
-                  </span>
-                )}
-              </button>
-            </nav>
-          </div>
-
-          {/* Tab content */}
-          {activeTab === 'services' && (
-            <div>
-              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Services</h2>
-              {allServices.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400">No services available at the moment.</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {allServices.map((service) => {
-                    const provider = providers.find(p => p.id === service.provider_id);
-                    return (
-                    <ServiceCard
-                      key={service.id}
-                      service={service}
-                        onAddToCart={() => handleAddToCart(service)}
-                      showAddToCart={true}
-                        showAction={false}
-                        providerName={provider?.name}
-                    />
-                    );
-                  })}
-                </div>
-              )}
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading your requests...</p>
             </div>
-          )}
-
-          {activeTab === 'requests' && (
+          ) : (
             <div>
-              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-                My Service Requests
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
+                Your Service Requests
               </h2>
               
               {requests.length === 0 ? (
@@ -297,123 +129,30 @@ export default function UserDashboard() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {requests.map((request) => (
-                    <div key={request.id} className="relative">
-                      <RequestCard
-                        request={request}
-                        showPendingProvider={request.providerId === 'pending'}
-                      />
-                      <div className="absolute top-2 right-2">
-                        <button
-                          onClick={async () => {
-                            if (!confirm('Cancel this request?')) return;
-                            const ok = await deleteServiceRequest(request.id);
-                            if (ok) {
-                              const updated = await getServiceRequestsByUserId(currentUser.id);
-                              setRequests(updated);
-                            } else {
-                              alert('Failed to remove request.');
-                            }
-                          }}
-                          className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
+                    <RequestCard
+                      key={request.id}
+                      request={request}
+                      showPendingProvider={request.providerId === 'pending'}
+                      onEdit={handleEditRequest}
+                      onDelete={handleDeleteRequest}
+                    />
                   ))}
                 </div>
               )}
             </div>
           )}
-
-          {activeTab === 'cart' && (
-            <div>
-              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-                My Shopping Cart
-              </h2>
-              <CartDisplay 
-                items={cart.items} 
-                userId={currentUser.id}
-                onUpdateCart={handleRefreshCart}
-                onCheckout={handleCheckout}
-              />
-            </div>
-          )}
         </div>
-      </main>
+      </div>
 
-      {/* Request Service Modal removed: clients must checkout from cart */}
-
-      {/* Generic Service Request Modal removed to enforce provider-specific services only */}
-
-      {/* Add-to-cart toast */}
-      {cartToast.visible && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-gray-900 text-white rounded-lg shadow-lg border border-gray-700">
-          <div className="p-4">
-            <div className="flex items-start">
-              <div className="flex-shrink-0 mr-3">
-                <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <p className="font-medium">{cartToast.service ? `${cartToast.service.name} added to cart` : 'Updated cart'}</p>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => setActiveTab('cart')}
-                    className="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 rounded-md"
-                  >
-                    Go to cart
-                  </button>
-                  {cartToast.service && (
-                    <button
-                      onClick={handleAddOneMore}
-                      className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md"
-                    >
-                      Add one more
-                    </button>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => setCartToast({ visible: false })}
-                className="ml-3 text-gray-400 hover:text-gray-200"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Checkout Confirmation Modal */}
-      <Modal
-        isOpen={isCheckoutModalOpen}
-        onClose={() => setIsCheckoutModalOpen(false)}
-        title="Complete Your Order"
-      >
-        <div className="p-4">
-          <p className="mb-4">
-            You're about to submit requests for all {cart.items.length} services in your cart. Would you like to proceed?
-          </p>
-          <div className="flex justify-end space-x-2">
-            <button
-              onClick={() => setIsCheckoutModalOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCompleteCheckout}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Confirm Order
-            </button>
-          </div>
-        </div>
-      </Modal>
+      <EditRequestModal
+        request={editingRequest}
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingRequest(null);
+        }}
+        onSave={handleSaveEdit}
+      />
     </div>
   );
 } 

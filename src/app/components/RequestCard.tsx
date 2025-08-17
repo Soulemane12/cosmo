@@ -14,6 +14,8 @@ interface RequestCardProps {
   isProvider?: boolean;
   onAccept?: (id: string) => void;
   onDecline?: (id: string) => void;
+  onEdit?: (request: ServiceRequest) => void;
+  onDelete?: (id: string) => void;
   showPendingProvider?: boolean;
 }
 
@@ -22,12 +24,15 @@ export default function RequestCard({
   isProvider = false,
   onAccept,
   onDecline,
+  onEdit,
+  onDelete,
   showPendingProvider = false
 }: RequestCardProps) {
   const [service, setService] = useState<Service | null>(null);
   const [provider, setProvider] = useState<Provider | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showActions, setShowActions] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -112,7 +117,29 @@ export default function RequestCard({
     : 0;
 
   return (
-    <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 p-4">
+    <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 p-4 relative">
+      {/* Action buttons */}
+      <div className="absolute top-2 right-2 flex space-x-1">
+        {onEdit && (
+          <button
+            onClick={() => onEdit(request)}
+            className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+            title="Edit request"
+          >
+            Edit
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onClick={() => onDelete(request.id)}
+            className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+            title="Delete request"
+          >
+            Delete
+          </button>
+        )}
+      </div>
+
       <div className="flex justify-between items-start mb-3">
         <div>
           <h3 className="font-semibold text-lg">{service?.name || 'Service'}</h3>
