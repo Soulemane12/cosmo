@@ -119,11 +119,11 @@ export default function RequestCard({
   return (
     <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 p-4 relative">
       {/* Action buttons */}
-      <div className="absolute top-2 right-2 flex space-x-1">
+      <div className="absolute top-2 right-2 flex flex-col space-y-1">
         {onEdit && (
           <button
             onClick={() => onEdit(request)}
-            className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+            className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
             title="Edit request"
           >
             Edit
@@ -132,7 +132,7 @@ export default function RequestCard({
         {onDelete && (
           <button
             onClick={() => onDelete(request.id)}
-            className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+            className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
             title="Delete request"
           >
             Delete
