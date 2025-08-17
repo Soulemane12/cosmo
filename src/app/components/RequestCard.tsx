@@ -117,29 +117,7 @@ export default function RequestCard({
     : 0;
 
   return (
-    <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 p-4 relative">
-      {/* Action buttons */}
-      <div className="absolute top-2 right-2 flex flex-col space-y-1">
-        {onEdit && (
-          <button
-            onClick={() => onEdit(request)}
-            className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-            title="Edit request"
-          >
-            Edit
-          </button>
-        )}
-        {onDelete && (
-          <button
-            onClick={() => onDelete(request.id)}
-            className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-            title="Delete request"
-          >
-            Delete
-          </button>
-        )}
-      </div>
-
+    <div className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-gray-800 p-4">
       <div className="flex justify-between items-start mb-3">
         <div>
           <h3 className="font-semibold text-lg">{service?.name || 'Service'}</h3>
@@ -194,6 +172,30 @@ export default function RequestCard({
           </p>
         )}
       </div>
+      
+      {/* Action buttons in the middle */}
+      {(onEdit || onDelete) && (
+        <div className="flex justify-center space-x-2 mb-3">
+          {onEdit && (
+            <button
+              onClick={() => onEdit(request)}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+              title="Edit request"
+            >
+              Edit
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={() => onDelete(request.id)}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
+              title="Delete request"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      )}
       
       {isProvider && request.status === 'pending' && (
         <div className="flex space-x-2">
