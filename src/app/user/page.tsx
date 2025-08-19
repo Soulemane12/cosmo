@@ -74,11 +74,15 @@ export default function UserDashboard() {
   const handleDeleteRequest = async (requestId: string) => {
     if (!confirm('Are you sure you want to delete this request?')) return;
     
+    console.log('User attempting to delete request:', requestId);
     const success = await deleteServiceRequest(requestId);
+    
     if (success) {
+      console.log('Request deleted successfully, updating UI');
       setRequests(prev => prev.filter(r => r.id !== requestId));
     } else {
-      alert('Failed to delete request');
+      console.error('Failed to delete request:', requestId);
+      alert('Failed to delete request. Please check the console for more details.');
     }
   };
 

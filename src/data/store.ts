@@ -1007,6 +1007,8 @@ export const declineClaimedRequest = async (requestId: string, providerId: strin
 
 export const deleteServiceRequest = async (id: string): Promise<boolean> => {
   try {
+    console.log('Attempting to delete service request:', id);
+    
     const { error } = await supabase
       .from('service_requests')
       .delete()
@@ -1014,9 +1016,16 @@ export const deleteServiceRequest = async (id: string): Promise<boolean> => {
 
     if (error) {
       console.error('Delete service request error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
       return false;
     }
 
+    console.log('Successfully deleted service request:', id);
     return true;
   } catch (error) {
     console.error('Delete service request error:', error);
