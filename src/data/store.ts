@@ -327,7 +327,12 @@ export const getServiceById = async (id: string): Promise<Service | null> => {
       .eq('id', id)
       .single();
 
-    if (error || !service) return null;
+    if (error) {
+      console.error('Get service error:', error);
+      return null;
+    }
+
+    if (!service) return null;
 
     return {
       id: service.id,
@@ -412,7 +417,12 @@ export const getProviderById = async (id: string): Promise<Provider | null> => {
       .eq('user_type', 'provider')
       .single();
 
-    if (userError || !user) return null;
+    if (userError) {
+      console.error('Get provider user error:', userError);
+      return null;
+    }
+
+    if (!user) return null;
 
     const { data: profile, error: profileError } = await supabase
       .from('provider_profiles')

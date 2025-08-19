@@ -79,7 +79,8 @@ export default function UserDashboard() {
     
     if (success) {
       console.log('Request deleted successfully, updating UI');
-      setRequests(prev => prev.filter(r => r.id !== requestId));
+      // Refresh the entire data instead of just filtering
+      await loadRequests();
     } else {
       console.error('Failed to delete request:', requestId);
       alert('Failed to delete request. Please check the console for more details.');
